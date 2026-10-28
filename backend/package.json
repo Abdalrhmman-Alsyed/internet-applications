@@ -10,7 +10,8 @@
     "prisma:migrate": "prisma migrate deploy --schema apps/users-service/prisma/schema.prisma && prisma migrate deploy --schema apps/products-service/prisma/schema.prisma && prisma migrate deploy --schema apps/orders-service/prisma/schema.prisma && prisma migrate deploy --schema apps/notifications-service/prisma/schema.prisma",
     "postinstall": "npm run prisma:generate",
     "lint": "tsc --noEmit -p tsconfig.json",
-    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand"
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "seed": "node scripts/seed.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

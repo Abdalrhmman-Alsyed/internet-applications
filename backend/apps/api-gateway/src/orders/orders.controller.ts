@@ -25,6 +25,15 @@ export class OrdersController {
     return sendRpc(this.orders, PATTERNS.orders.findAll, { user, query });
   }
 
+  // Declared before ':id' so "stats" isn't parsed as an order id.
+  @Roles(Role.ADMIN)
+  @Get('stats')
+  @ApiOperation({ summary: '[Admin] Dashboard statistics: per status, revenue, last 7 days' })
+  @ApiForbiddenResponse({ description: 'Not an admin' })
+  stats(@CurrentUser() user: AuthUser) {
+    return sendRpc(this.orders, PATTERNS.orders.stats, { user });
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Order details with status history (owner or admin)' })
   @ApiForbiddenResponse({ description: "Order belongs to another user" })

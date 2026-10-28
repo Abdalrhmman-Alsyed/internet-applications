@@ -73,6 +73,10 @@ services:
       <<: *backend-env
       PORT: 3000
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001}
+      # Read-only queue stats for the dashboard's System page
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_USER: ${RABBITMQ_USER:-app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-app_password}
     ports:
       - "3000:3000"
     depends_on:
@@ -154,6 +158,7 @@ services:
       context: ./web
       args:
         NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3000}
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL:-http://localhost:3004}
     environment:
       API_INTERNAL_URL: http://api-gateway:3000
     ports:

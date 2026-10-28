@@ -153,6 +153,42 @@ export class OrdersService {
     return this.transition(order, OrderStatus.CANCELLED, user.id, 'Cancelled by customer');
   }
 
+  /** Dashboard figures: counts per status, revenue (excluding cancelled) and the last 7 days. */
+  async stats(user: AuthUser) {
+    if (user.role !== Role.ADMIN) throw new ForbiddenException('Only admins can view order statistics');
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - 6);
+
+    const [grouped, revenue, recent] = await Promise.all([
+      this.prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.order.aggregate({ where: { status: { not: OrderStatus.CANCELLED } }, _sum: { total: true } }),
+      this.prisma.order.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true, total: true, status: true } }),
+    ]);
+
+    const byStatus = Object.fromEntries(Object.values(OrderStatus).map((s) => [s, 0])) as Record<OrderStatus, number>;
+    for (const g of grouped) byStatus[g.status as OrderStatus] = g._count._all;
+
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(since);
+      day.setDate(since.getDate() + i);
+      return { date: day.toISOString().slice(0, 10), orders: 0, revenue: 0 };
+    });
+    for (const o of recent) {
+      const bucket = last7Days.find((d) => d.date === o.createdAt.toISOString().slice(0, 10));
+      if (!bucket) continue;
+      bucket.orders += 1;
+      if (o.status !== OrderStatus.CANCELLED) bucket.revenue += o.total.toNumber();
+    }
+
+    return {
+      totalOrders: Object.values(byStatus).reduce((a, b) => a + b, 0),
+      revenue: revenue._sum.total?.toNumber() ?? 0,
+      byStatus,
+      last7Days,
+    };
+  }
+
   /** Loads an order and enforces ownership: a customer touching someone else's order gets 403. */
   private async getAuthorized(user: AuthUser, id: string) {
     const order = await this.prisma.order.findUnique({ where: { id }, include: orderInclude });

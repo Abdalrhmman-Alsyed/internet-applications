@@ -1,6 +1,15 @@
 # Mobile (Flutter)
 
-تطبيق واحد بيتغير حسب الدور: **الزبون** (متجر، سلة، طلبات، إشعارات) و**الأدمن** (وضع إدارة خفيف: الطلبات الواردة، تغيير الحالة، المخزون).
+تطبيق واحد بيتغير حسب الدور. السيرفر نفسه بيفرض نفس التقسيم.
+
+| الدور | التبويبات |
+|---|---|
+| **زبون** | Shop (بحث، تصنيفات، ترتيب) ← تفاصيل المنتج ← Cart ← Place order · Orders (تتبع الحالة، إلغاء) · Alerts (لحظية) · Profile |
+| **أدمن** | Dashboard (إحصائيات، مخزون منخفض) · Orders (تغيير الحالة) · Inventory (مخزون، إخفاء) · Alerts · Profile |
+
+**Profile ← Security test:** بيبعت طلبات بتتجاوز الصلاحيات **بتوكن المستخدم نفسه**، وبيعرض رد السيرفر (401 / 403 / 400). مخصص للعرض قدام المعيد.
+
+الحسابات التجريبية (بعد `npm run seed` بالباك إند) موجودة كأزرار بشاشة الدخول.
 
 ## ⚠️ مسار المشروع
 
@@ -28,20 +37,24 @@ flutter run --dart-define=API_URL=http://192.168.1.10:3000 --dart-define=WS_URL=
 
 ```
 lib/
+├── main.dart                    Providers + اختيار الشاشة حسب حالة الدخول والدور
 ├── core/
-│   ├── config/env.dart                  روابط الباك إند
-│   ├── network/api_client.dart          Dio + التوكن + refresh تلقائي عند 401 + ApiException
-│   ├── storage/token_storage.dart       التوكنات بـ Keystore/Keychain
-│   └── realtime/notifications_socket.dart  الإشعارات اللحظية
+│   ├── config/env.dart          روابط الباك إند (+ تصحيح روابط الصور للـ emulator)
+│   ├── network/api_client.dart  Dio + التوكن + refresh تلقائي عند 401 + ApiException + raw()
+│   ├── storage/token_storage.dart  التوكنات بـ Keystore/Keychain
+│   ├── realtime/notifications_socket.dart  Socket.io
+│   ├── models.dart              User, Product, Order, AppNotification…
+│   └── widgets.dart             StatusChip, ErrorView, ProductImage, snackbars
 └── features/
-    ├── auth/           (فلاتر 1)
-    ├── products/       (فلاتر 1)
-    ├── cart/           (فلاتر 1)
-    ├── orders/         (فلاتر 2)
-    ├── notifications/  (فلاتر 2)
-    └── admin/          (فلاتر 2)
+    ├── shell.dart               التبويبات حسب الدور
+    ├── auth/                    login, register, AuthController
+    ├── products/                القائمة والتفاصيل
+    ├── cart/                    CartController + شاشة السلة والطلب
+    ├── orders/                  القائمة والتفاصيل (تتبع + إجراءات حسب الدور)
+    ├── notifications/           NotificationsController (لحظي) + الشاشة
+    ├── profile/                 الملف الشخصي
+    ├── admin/                   Dashboard + Inventory
+    └── security/                Security test
 ```
 
-كل feature فيها: `data/` (الـ repository اللي بيستعمل `ApiClient`)، `models/`، `screens/`، `widgets/`.
-
-أي خطأ من الـ API بيوصلكم `ApiException(statusCode, message)`، فما بتحتاجوا تقرأوا الـ JSON يدوياً.
+الحالة بـ `provider` (ChangeNotifier). أي خطأ من الـ API بيوصل كـ `ApiException(statusCode, message)`.

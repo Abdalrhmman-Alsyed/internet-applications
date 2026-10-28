@@ -95,6 +95,13 @@ export class ProductsQueryDto extends PaginationQueryDto {
   @IsBoolean()
   inStock?: boolean;
 
+  /** Low-stock view: products with stock ≤ this value */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxStock?: number;
+
   @IsOptional()
   @IsIn(['newest', 'price_asc', 'price_desc', 'name'])
   sort?: 'newest' | 'price_asc' | 'price_desc' | 'name';

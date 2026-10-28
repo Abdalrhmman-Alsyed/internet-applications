@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "E-Commerce API",
-    "description": "Run the folders in order (Collection Runner works). Folder \"5. Security proofs\" shows that a user cannot reach another user's data or perform operations outside their role.\nAuth routes are rate-limited (10/min/IP).",
+    "description": "Run the folders in order (Collection Runner works). Folder \"5. Security proofs\" shows that a user cannot reach another user's data or perform operations outside their role.\nAuth routes are rate-limited (20/min/IP).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

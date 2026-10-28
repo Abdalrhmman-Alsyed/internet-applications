@@ -4,10 +4,11 @@ import { ClientProxy } from '@nestjs/microservices';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, Public } from '../common/decorators';
+import { AUTH_RATE_LIMIT } from '../health/health.controller';
 import { LoginDto, RefreshDto, RegisterDto } from './auth.dto';
 
 /** Stricter rate limit on credential endpoints (per IP, per minute). */
-const AUTH_LIMIT = { default: { limit: Number(process.env.AUTH_RATE_LIMIT ?? 10), ttl: 60_000 } };
+const AUTH_LIMIT = { default: { limit: AUTH_RATE_LIMIT, ttl: 60_000 } };
 
 @ApiTags('Auth')
 @Controller('auth')

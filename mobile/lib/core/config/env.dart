@@ -6,4 +6,12 @@ class Env {
   static const wsUrl = String.fromEnvironment('WS_URL', defaultValue: 'http://10.0.2.2:3004');
 
   static const apiBase = '$apiUrl/api/v1';
+
+  /// Image URLs come back as http://localhost:9000/... (the browser's view).
+  /// On a phone "localhost" is the phone itself, so point them at the API host.
+  static String fixUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.host != 'localhost' && uri.host != '127.0.0.1')) return url;
+    return uri.replace(host: Uri.parse(apiUrl).host).toString();
+  }
 }

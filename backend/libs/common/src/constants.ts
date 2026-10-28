@@ -52,6 +52,7 @@ export const PATTERNS = {
     findOne: 'orders.find_one',
     updateStatus: 'orders.update_status',
     cancel: 'orders.cancel',
+    stats: 'orders.stats',
   },
   notifications: {
     findAll: 'notifications.find_all',

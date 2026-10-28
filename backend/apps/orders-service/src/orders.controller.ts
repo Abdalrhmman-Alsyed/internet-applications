@@ -32,6 +32,11 @@ export class OrdersController {
     return this.orders.updateStatus(user, id, status, note);
   }
 
+  @MessagePattern(PATTERNS.orders.stats)
+  stats(@Payload() { user }: { user: AuthUser }) {
+    return this.orders.stats(user);
+  }
+
   @MessagePattern(PATTERNS.orders.cancel)
   cancel(@Payload() { user, id }: { user: AuthUser; id: string }) {
     return this.orders.cancel(user, id);

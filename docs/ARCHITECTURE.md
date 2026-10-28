@@ -51,8 +51,9 @@
 | **JWT** access (15 دقيقة) + refresh (7 أيام) مع rotation | Sessions | ما بيحتاج مخزن جلسات مشترك بين الخدمات، مناسب للموبايل. الـ refresh بينستعمل مرة وحدة؛ إعادة استعمال توكن قديم بتلغي الجلسة. |
 | **MinIO** (S3) للصور | القرص / الـ DB | القرص بيخرب مع أكتر من نسخة من الخدمة؛ الـ DB بتتبطأ. نفس الكود بيشتغل مع AWS S3. |
 | **Socket.io** | Polling | تحديثات لحظية بدون ضغط على السيرفر. |
-| **Next.js** للويب | Flutter Web | أفضل للـ dashboards والـ SEO، ومطوّر الويب متخصص فيه. |
-| **توليد الـ client من OpenAPI** | كتابة يدوية | 3 عملاء (ويب، موبايل، Postman) لازم يضلّوا متطابقين مع الباك. |
+| **Next.js** للوحة التحكم | Flutter Web | أفضل للـ dashboards والجداول، ومطوّر الويب متخصص فيه. |
+| **صيغة خطأ موحّدة + client واحد بكل واجهة** | معالجة أخطاء بكل شاشة | الويب (`lib/api.ts`) والموبايل (`ApiClient`) بيقروا نفس صيغة الخطأ، وبيجددوا التوكن تلقائياً عند 401. |
+| **`provider`** بالموبايل | Bloc / Riverpod | أبسط شي بيكفي لحجم التطبيق، والفريق بيتعلمه بسرعة. |
 
 ## بنية الباك إند
 
@@ -74,7 +75,7 @@ backend/
 
 ## الأمان — طبقات الحماية
 
-1. **Rate limiting** (Gateway): 120 طلب/دقيقة/IP عام، 10/دقيقة على مسارات الدخول.
+1. **Rate limiting** (Gateway): 300 طلب/دقيقة/IP عام، 20/دقيقة على مسارات الدخول والتسجيل.
 2. **المصادقة** (Gateway): كل مسار بيحتاج JWT إلا اللي معلّم `@Public()`.
 3. **الصلاحيات حسب الدور** (Gateway): `@Roles(Role.ADMIN)`.
 4. **الملكية** (داخل الخدمة نفسها): orders-service و notifications-service بيتحققوا إن المورد للمستخدم. حتى لو انفتح خطأ بالـ Gateway، الخدمة بترفض (defense in depth).
@@ -111,7 +112,7 @@ backend/
 | GET | `/users` · `/users/:id` | أدمن |
 | GET | `/categories` | عام |
 | POST/DELETE | `/categories` · `/categories/:id` | أدمن |
-| GET | `/products` (pagination, search, categoryId, minPrice, maxPrice, inStock, sort) · `/products/:id` | عام |
+| GET | `/products` (pagination, search, categoryId, minPrice, maxPrice, inStock, maxStock, sort) · `/products/:id` | عام |
 | POST/PATCH/DELETE | `/products` · `/products/:id` | أدمن |
 | POST/DELETE | `/products/:id/images` · `/products/:id/images/:imageId` | أدمن |
 | PATCH | `/products/:id/stock` (`stock` أو `delta`) | أدمن |
@@ -120,6 +121,8 @@ backend/
 | PATCH | `/orders/:id/status` | أدمن |
 | POST | `/orders/:id/cancel` (الزبون: طلبه وهو PENDING) | مسجّل |
 | GET/PATCH | `/notifications` · `/notifications/:id/read` · `/notifications/read-all` | مسجّل |
+| GET | `/orders/stats` (إحصائيات لوحة التحكم) | أدمن |
+| GET | `/system/info` (حالة الخدمات، إعدادات الأمان، إحصائيات RabbitMQ) | أدمن |
 | GET | `/health` | عام |
 
 **حالات الطلب:** `PENDING → CONFIRMED → SHIPPED → DELIVERED`، والإلغاء مسموح من `PENDING` أو `CONFIRMED` (والمخزون بيرجع).
@@ -132,3 +135,13 @@ backend/
 - Socket.io مع أكتر من نسخة من notifications-service بيحتاج Redis adapter.
 - الخدمات stateless (الصور بـ MinIO، الجلسات بالـ JWT)، فينفع نعمل `docker compose up --scale products-service=3` بعد ما نحط load balancer.
 - MinIO ما عاد ينشر صور Docker عامة، فمستعملين صورة Bitnami لنفس الإصدار.
+
+## الواجهات
+
+**لوحة التحكم (Next.js، أدمن فقط):** Overview (إيرادات، طلبات حسب الحالة، آخر 7 أيام، مخزون منخفض)، Orders (تغيير الحالة حسب الانتقالات المسموحة)، Products (إضافة، تعديل، صور، مخزون، إخفاء)، Categories، Users، Notifications (لحظية)، **System** (معلومات الباك إند الحية)، **Security lab** (محاولات تجاوز صلاحيات حقيقية). زبون بيسجّل دخول بيشوف رد السيرفر 403.
+
+**تطبيق الموبايل (Flutter):** تطبيق واحد بيتغيّر حسب الدور.
+- **الزبون:** Shop (بحث، تصنيفات، ترتيب، تمرير لا نهائي) ← تفاصيل المنتج ← Cart ← Place order ← Orders (تتبع الحالة، إلغاء الطلب المعلّق) ← Alerts (لحظية) ← Profile.
+- **الأدمن:** Dashboard، Orders (تغيير الحالة)، Inventory (مخزون، إخفاء)، Alerts، Profile.
+- **Security test** للدورين: بيبعت طلبات تتجاوز الصلاحية بتوكن المستخدم نفسه، وبيعرض رد السيرفر.
+

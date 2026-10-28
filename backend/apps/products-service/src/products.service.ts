@@ -25,6 +25,7 @@ export interface FindProductsQuery {
   minPrice?: number;
   maxPrice?: number;
   inStock?: boolean;
+  maxStock?: number;
   sort?: 'newest' | 'price_asc' | 'price_desc' | 'name';
   includeInactive?: boolean;
 }
@@ -62,7 +63,9 @@ export class ProductsService {
     const where: Prisma.ProductWhereInput = {
       ...(!q.includeInactive && { isActive: true }),
       ...(q.categoryId && { categoryId: q.categoryId }),
-      ...(q.inStock && { stock: { gt: 0 } }),
+      ...((q.inStock || q.maxStock !== undefined) && {
+        stock: { gt: q.inStock ? 0 : undefined, lte: q.maxStock },
+      }),
       ...((q.minPrice !== undefined || q.maxPrice !== undefined) && {
         price: { gte: q.minPrice, lte: q.maxPrice },
       }),

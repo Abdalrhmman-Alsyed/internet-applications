@@ -3,7 +3,7 @@
  *   npm run test:e2e
  * Proves the security requirements: users can't reach other users' data, and
  * operations outside a role's permissions are rejected.
- * Note: auth routes are rate-limited per IP, so wait ~1 minute between runs.
+ * Note: auth routes are rate-limited per IP (20/min), so wait ~1 minute between runs.
  */
 import { io, Socket } from 'socket.io-client';
 
@@ -71,7 +71,12 @@ describe('E-commerce API (e2e)', () => {
   let aliceOrderId: string;
   let socket: Socket;
 
-  afterAll(() => socket?.disconnect());
+  afterAll(async () => {
+    socket?.disconnect();
+    // Hide test data so it doesn't clutter the demo catalogue.
+    if (adminToken && productId) await api('DELETE', `/products/${productId}`, { token: adminToken });
+    if (adminToken && categoryId) await api('DELETE', `/categories/${categoryId}`, { token: adminToken });
+  });
 
   describe('Infrastructure', () => {
     it('all services are up', async () => {
@@ -137,6 +142,20 @@ describe('E-commerce API (e2e)', () => {
 
     it('customer cannot list users', async () => {
       expectErrorShape(await api('GET', '/users', { token: alice.token }), 403);
+    });
+
+    it('customer cannot read dashboard statistics or system info', async () => {
+      expectErrorShape(await api('GET', '/orders/stats', { token: alice.token }), 403);
+      expectErrorShape(await api('GET', '/system/info', { token: alice.token }), 403);
+    });
+
+    it('admin reads dashboard statistics and system info', async () => {
+      const stats = await api('GET', '/orders/stats', { token: adminToken });
+      expect(stats.status).toBe(200);
+      expect(stats.body.byStatus).toEqual(expect.objectContaining({ PENDING: expect.any(Number) }));
+      const info = await api('GET', '/system/info', { token: adminToken });
+      expect(info.status).toBe(200);
+      expect(Object.keys(info.body.services)).toEqual(['users', 'products', 'orders', 'notifications']);
     });
 
     it('admin manages categories and products', async () => {
@@ -310,7 +329,7 @@ describe('E-commerce API (e2e)', () => {
 
     it('rate-limits login attempts per IP (429)', async () => {
       let last: Res | undefined;
-      for (let i = 0; i < 15 && last?.status !== 429; i++) {
+      for (let i = 0; i < 40 && last?.status !== 429; i++) {
         last = await api('POST', '/auth/login', { body: { email: `nobody.${run}@test.local`, password: 'Wrong@1234' } });
       }
       expectErrorShape(last!, 429);

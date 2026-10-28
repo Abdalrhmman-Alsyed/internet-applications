@@ -6,7 +6,8 @@ RUN npm install -g npm@11.7.0 --no-audit --no-fund && npm ci --no-audit --no-fun
 FROM deps AS build
 COPY . .
 ARG NEXT_PUBLIC_API_URL=http://localhost:3000
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_WS_URL=http://localhost:3004
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL} NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:22-alpine AS runtime
