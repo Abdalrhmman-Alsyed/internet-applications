@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma-clients/users"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("USERS_DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  passwordHash        String
+  name                String
+  phone               String?
+  role                Role      @default(CUSTOMER)
+  /// Brute-force protection: consecutive failed logins and lock expiry.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  /// SHA-256 of the current refresh token (rotated on every refresh, cleared on logout).
+  refreshTokenHash    String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("users")
+}

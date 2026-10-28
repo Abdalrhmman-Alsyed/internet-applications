@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma-clients/notifications"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NOTIFICATIONS_DATABASE_URL")
+}
+
+/// USER: for one user (userId). ADMINS: broadcast to every admin.
+enum Audience {
+  USER
+  ADMINS
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  audience  Audience  @default(USER)
+  userId    String?
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([audience, createdAt])
+  @@map("notifications")
+}
