@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/network/api_client.dart';
 import 'auth_controller.dart';
 import 'register_screen.dart';
 
 const _demoAccounts = [
-  ('Customer · Ahmad', 'ahmad@shop.local', 'Customer@123'),
-  ('Customer · Sara', 'sara@shop.local', 'Customer@123'),
-  ('Admin', 'admin@shop.local', 'Admin@12345'),
+  ('demo.ahmad', 'ahmad@shop.local', 'Customer@123'),
+  ('demo.sara', 'sara@shop.local', 'Customer@123'),
+  ('demo.admin', 'admin@shop.local', 'Admin@12345'),
 ];
 
 class LoginScreen extends StatefulWidget {
@@ -45,6 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      appBar: AppBar(actions: const [LanguageButton()]),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -60,22 +62,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Icon(Icons.shopping_bag_outlined, size: 36, color: theme.colorScheme.primary),
                   ),
                   const SizedBox(height: 16),
-                  Text('Welcome back', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(context.tr('login.welcome'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('Sign in to continue shopping', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
+                  Text(context.tr('login.subtitle'), textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
                   const SizedBox(height: 32),
                   TextFormField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined), border: OutlineInputBorder()),
-                    validator: (v) => v != null && v.contains('@') ? null : 'Enter a valid email',
+                    decoration: InputDecoration(labelText: context.tr('email'), prefixIcon: const Icon(Icons.email_outlined), border: const OutlineInputBorder()),
+                    validator: (v) => v != null && v.contains('@') ? null : context.tr('email.invalid'),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _password,
                     obscureText: _obscure,
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      labelText: context.tr('password'),
                       prefixIcon: const Icon(Icons.lock_outline),
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
@@ -83,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
-                    validator: (v) => v == null || v.isEmpty ? 'Enter your password' : null,
+                    validator: (v) => v == null || v.isEmpty ? context.tr('password.required') : null,
                     onFieldSubmitted: (_) => _submit(),
                   ),
                   if (_error != null) ...[
@@ -96,15 +98,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                     child: _busy
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Sign in'),
+                        : Text(context.tr('signIn')),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-                    child: const Text("Don't have an account? Create one"),
+                    child: Text(context.tr('login.noAccount')),
                   ),
                   const Divider(height: 32),
-                  Text('Demo accounts', style: theme.textTheme.labelMedium?.copyWith(color: Colors.grey.shade600)),
+                  Text(context.tr('login.demo'), style: theme.textTheme.labelMedium?.copyWith(color: Colors.grey.shade600)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -112,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       for (final (label, email, password) in _demoAccounts)
                         ActionChip(
-                          label: Text(label),
+                          label: Text(context.tr(label)),
                           onPressed: () {
                             _email.text = email;
                             _password.text = password;

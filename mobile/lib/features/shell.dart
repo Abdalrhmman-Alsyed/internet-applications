@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/i18n.dart';
 import 'admin/admin_dashboard_screen.dart';
 import 'admin/inventory_screen.dart';
 import 'cart/cart_controller.dart';
@@ -29,7 +30,8 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    _notifications.start();
+    // After the first frame: start() notifies listeners, which isn't allowed mid-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notifications.start());
   }
 
   @override
@@ -51,18 +53,18 @@ class _AppShellState extends State<AppShell> {
 
     final destinations = widget.admin
         ? [
-            const NavigationDestination(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
-            const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
-            const NavigationDestination(icon: Icon(Icons.inventory_2_outlined), label: 'Inventory'),
-            NavigationDestination(icon: badge(unread, Icons.notifications_outlined), label: 'Alerts'),
-            const NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
+            NavigationDestination(icon: const Icon(Icons.dashboard_outlined), label: context.tr('nav.dashboard')),
+            NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), label: context.tr('nav.orders')),
+            NavigationDestination(icon: const Icon(Icons.inventory_2_outlined), label: context.tr('nav.inventory')),
+            NavigationDestination(icon: badge(unread, Icons.notifications_outlined), label: context.tr('nav.alerts')),
+            NavigationDestination(icon: const Icon(Icons.person_outline), label: context.tr('nav.profile')),
           ]
         : [
-            const NavigationDestination(icon: Icon(Icons.storefront_outlined), label: 'Shop'),
-            NavigationDestination(icon: badge(cartCount, Icons.shopping_cart_outlined), label: 'Cart'),
-            const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
-            NavigationDestination(icon: badge(unread, Icons.notifications_outlined), label: 'Alerts'),
-            const NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
+            NavigationDestination(icon: const Icon(Icons.storefront_outlined), label: context.tr('nav.shop')),
+            NavigationDestination(icon: badge(cartCount, Icons.shopping_cart_outlined), label: context.tr('nav.cart')),
+            NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), label: context.tr('nav.orders')),
+            NavigationDestination(icon: badge(unread, Icons.notifications_outlined), label: context.tr('nav.alerts')),
+            NavigationDestination(icon: const Icon(Icons.person_outline), label: context.tr('nav.profile')),
           ];
 
     return Scaffold(

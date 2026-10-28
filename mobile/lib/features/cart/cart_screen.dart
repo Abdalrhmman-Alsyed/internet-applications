@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets.dart';
 import '../orders/order_details_screen.dart';
@@ -20,14 +21,15 @@ class _CartScreenState extends State<CartScreen> {
 
   Future<void> _checkout() async {
     if (_address.text.trim().length < 5) {
-      showError('Enter a shipping address (at least 5 characters)');
+      showError(context.tr('cart.addressShort'));
       return;
     }
     setState(() => _busy = true);
     try {
       final order = await context.read<CartController>().checkout(address: _address.text, note: _note.text);
-      showSuccess('Order ${order.shortId} placed!');
-      if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailsScreen(order.id)));
+      if (!mounted) return;
+      showSuccess(context.tr('cart.placed', {'id': order.shortId}));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailsScreen(order.id)));
     } on ApiException catch (e) {
       // e.g. 409 "Insufficient stock for ..." when someone bought the last unit first
       showError(e);
@@ -41,11 +43,11 @@ class _CartScreenState extends State<CartScreen> {
     final cart = context.watch<CartController>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cart'),
-        actions: [if (!cart.isEmpty) TextButton(onPressed: cart.clear, child: const Text('Clear'))],
+        title: Text(context.tr('cart.title')),
+        actions: [if (!cart.isEmpty) TextButton(onPressed: cart.clear, child: Text(context.tr('clear')))],
       ),
       body: cart.isEmpty
-          ? const EmptyView(icon: Icons.shopping_cart_outlined, text: 'Your cart is empty')
+          ? EmptyView(icon: Icons.shopping_cart_outlined, text: context.tr('cart.empty'))
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [
@@ -62,7 +64,7 @@ class _CartScreenState extends State<CartScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(line.product.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                Text('${money(line.product.price)} each', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                Text(context.tr('cart.each', {'price': money(line.product.price)}), style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                                 Text(money(line.subtotal), style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -80,12 +82,12 @@ class _CartScreenState extends State<CartScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _address,
-                  decoration: const InputDecoration(labelText: 'Shipping address', prefixIcon: Icon(Icons.location_on_outlined), border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: context.tr('cart.address'), prefixIcon: const Icon(Icons.location_on_outlined), border: const OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _note,
-                  decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.note_outlined), border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: context.tr('cart.note'), prefixIcon: const Icon(Icons.note_outlined), border: const OutlineInputBorder()),
                 ),
               ],
             ),
@@ -100,7 +102,7 @@ class _CartScreenState extends State<CartScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${cart.count} item(s)', style: TextStyle(color: Colors.grey.shade600)),
+                        Text(context.tr('cart.items', {'n': cart.count}), style: TextStyle(color: Colors.grey.shade600)),
                         Text(money(cart.total), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                       ],
                     ),
@@ -111,7 +113,7 @@ class _CartScreenState extends State<CartScreen> {
                         style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                         child: _busy
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Text('Place order'),
+                            : Text(context.tr('cart.placeOrder')),
                       ),
                     ),
                   ],

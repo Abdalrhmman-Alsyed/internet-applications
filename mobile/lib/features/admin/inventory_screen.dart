@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets.dart';
@@ -39,13 +40,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _toggle(Product p) async {
+    final hidden = context.tr('inventory.hiddenDone', {'name': p.name});
+    final restored = context.tr('inventory.restored', {'name': p.name});
     try {
       if (p.isActive) {
         await _api.delete('/products/${p.id}');
-        showSuccess('${p.name} hidden from the store');
+        showSuccess(hidden);
       } else {
         await _api.patch('/products/${p.id}', data: {'isActive': true});
-        showSuccess('${p.name} restored');
+        showSuccess(restored);
       }
       _refresh();
     } catch (e) {
@@ -56,7 +59,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Inventory')),
+      appBar: AppBar(title: Text(context.tr('nav.inventory'))),
       body: RefreshIndicator(
         onRefresh: () async => _refresh(),
         child: FutureBuilder<List<Product>>(
@@ -86,7 +89,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                Text('${money(p.price)}${p.isActive ? '' : ' · hidden'}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                Text('${money(p.price)}${p.isActive ? '' : ' · ${context.tr('inventory.hidden')}'}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                               ],
                             ),
                           ),
@@ -102,7 +105,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           IconButton(onPressed: busy ? null : () => _adjust(p, 5), icon: const Icon(Icons.add_circle_outline), tooltip: '+5'),
                           PopupMenuButton<String>(
                             onSelected: (_) => _toggle(p),
-                            itemBuilder: (_) => [PopupMenuItem(value: 'toggle', child: Text(p.isActive ? 'Hide from store' : 'Restore'))],
+                            itemBuilder: (_) => [PopupMenuItem(value: 'toggle', child: Text(context.tr(p.isActive ? 'inventory.hide' : 'inventory.restore')))],
                           ),
                         ],
                       ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../auth/auth_controller.dart';
@@ -30,6 +31,7 @@ class _Ctx {
 class _Scenario {
   const _Scenario(this.title, this.method, this.path, this.as, this.expectCustomer, this.expectAdmin, this.why, {this.body});
 
+  /// Translation keys for the title and the explanation.
   final String title;
   final String method;
   final String Function(_Ctx) path;
@@ -43,28 +45,26 @@ class _Scenario {
 }
 
 final _scenarios = <_Scenario>[
-  _Scenario('Read orders without a token', 'GET', (_) => '/orders', _As.none, 401, 401, 'Every route needs a JWT.'),
-  _Scenario('Use a forged ADMIN token', 'GET', (_) => '/users/me', _As.forged, 401, 401, 'Signature checked with the server secret.'),
-  _Scenario('Register yourself as ADMIN', 'POST', (_) => '/auth/register', _As.none, 400, 400, 'Unknown field "role" is rejected.',
+  _Scenario('sec.noToken', 'GET', (_) => '/orders', _As.none, 401, 401, 'sec.noToken.why'),
+  _Scenario('sec.forged', 'GET', (_) => '/users/me', _As.forged, 401, 401, 'sec.forged.why'),
+  _Scenario('sec.registerAdmin', 'POST', (_) => '/auth/register', _As.none, 400, 400, 'sec.registerAdmin.why',
       body: (_) => {'email': 'evil.${DateTime.now().millisecondsSinceEpoch}@test.local', 'password': _demoPassword, 'name': 'Evil', 'role': 'ADMIN'}),
-  _Scenario('Create a product', 'POST', (_) => '/products', _As.me, 403, null, 'Admin-only route.', body: (_) => {'name': 'Hacked', 'price': 1, 'stock': 999}),
-  _Scenario('Mark the victim\'s order DELIVERED', 'PATCH', (c) => '/orders/${c.victimOrderId}/status', _As.me, 403, null, 'Only admins change status.',
-      body: (_) => {'status': 'DELIVERED'}),
-  _Scenario('List all users', 'GET', (_) => '/users?limit=1', _As.me, 403, 200, 'Admin-only route.'),
-  _Scenario('Read sales statistics', 'GET', (_) => '/orders/stats', _As.me, 403, 200, 'Admin-only route.'),
-  _Scenario('Read system information', 'GET', (_) => '/system/info', _As.me, 403, 200, 'Admin-only route.'),
-  _Scenario('Open the victim\'s order', 'GET', (c) => '/orders/${c.victimOrderId}', _As.me, 403, 200, 'Owner or admin only.'),
-  _Scenario('Cancel the victim\'s order', 'POST', (c) => '/orders/${c.victimOrderId}/cancel', _As.me, 403, null, 'Ownership checked first.'),
-  _Scenario('Mark the victim\'s notification read', 'PATCH', (c) => '/notifications/${c.victimNotificationId}/read', _As.me, 403, 403,
-      'Personal notifications belong to their owner.'),
-  _Scenario('Order a negative quantity', 'POST', (_) => '/orders', _As.me, 400, 403, 'Validation (customers) / only customers order (admins).',
+  _Scenario('sec.createProduct', 'POST', (_) => '/products', _As.me, 403, null, 'sec.createProduct.why', body: (_) => {'name': 'Hacked', 'price': 1, 'stock': 999}),
+  _Scenario('sec.deliver', 'PATCH', (c) => '/orders/${c.victimOrderId}/status', _As.me, 403, null, 'sec.deliver.why', body: (_) => {'status': 'DELIVERED'}),
+  _Scenario('sec.listUsers', 'GET', (_) => '/users?limit=1', _As.me, 403, 200, 'sec.adminOnly'),
+  _Scenario('sec.stats', 'GET', (_) => '/orders/stats', _As.me, 403, 200, 'sec.adminOnly'),
+  _Scenario('sec.system', 'GET', (_) => '/system/info', _As.me, 403, 200, 'sec.adminOnly'),
+  _Scenario('sec.openOrder', 'GET', (c) => '/orders/${c.victimOrderId}', _As.me, 403, 200, 'sec.openOrder.why'),
+  _Scenario('sec.cancelOrder', 'POST', (c) => '/orders/${c.victimOrderId}/cancel', _As.me, 403, null, 'sec.cancelOrder.why'),
+  _Scenario('sec.readNotification', 'PATCH', (c) => '/notifications/${c.victimNotificationId}/read', _As.me, 403, 403, 'sec.readNotification.why'),
+  _Scenario('sec.negative', 'POST', (_) => '/orders', _As.me, 400, 403, 'sec.negative.why',
       body: (c) => {
             'items': [
               {'productId': c.productId, 'quantity': -5}
             ],
             'shippingAddress': 'Somewhere 1',
           }),
-  _Scenario('Control: the victim opens their own order', 'GET', (c) => '/orders/${c.victimOrderId}', _As.victim, 200, 200, 'Allowed access still works.'),
+  _Scenario('sec.control', 'GET', (c) => '/orders/${c.victimOrderId}', _As.victim, 200, 200, 'sec.control.why'),
 ];
 
 class SecurityTestScreen extends StatefulWidget {
@@ -85,11 +85,13 @@ class _SecurityTestScreenState extends State<SecurityTestScreen> {
   Future<_Ctx?> _setup() async {
     if (_ctx != null) return _ctx;
     final user = context.read<AuthController>().user!;
-    final me = await _api.tokens.accessToken;
     final victimEmail = user.email == 'sara@shop.local' ? 'ahmad@shop.local' : 'sara@shop.local';
+    final noData = context.tr('sec.noData');
+    final noVictim = context.tr('sec.noVictim', {'email': victimEmail});
+    final me = await _api.tokens.accessToken;
     final login = await _api.raw('POST', '/auth/login', data: {'email': victimEmail, 'password': _demoPassword});
     if (login.status != 200 || me == null) {
-      setState(() => _setupError = 'Could not sign in the demo victim ($victimEmail): ${login.status}. Run "npm run seed" in backend/.');
+      setState(() => _setupError = noVictim.replaceAll('{status}', '${login.status}'));
       return null;
     }
     final victimToken = (login.body as Map)['accessToken'] as String;
@@ -99,7 +101,7 @@ class _SecurityTestScreenState extends State<SecurityTestScreen> {
     final orderList = (orders.body as Map)['data'] as List;
     final productList = (products.body as Map)['data'] as List;
     if (orderList.isEmpty || productList.isEmpty) {
-      setState(() => _setupError = 'The victim has no orders yet. Run "npm run seed" in backend/.');
+      setState(() => _setupError = noData);
       return null;
     }
     final noteList = (notes.body as Map)['data'] as List;
@@ -135,7 +137,7 @@ class _SecurityTestScreenState extends State<SecurityTestScreen> {
     final passed = ran.where((e) => e.value.status == _expected(e.key, user)).length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Security test')),
+      appBar: AppBar(title: Text(context.tr('sec.title')), actions: const [LanguageButton()]),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -143,10 +145,10 @@ class _SecurityTestScreenState extends State<SecurityTestScreen> {
             color: user.isAdmin ? Colors.indigo.shade50 : Colors.blue.shade50,
             child: ListTile(
               leading: Icon(user.isAdmin ? Icons.admin_panel_settings : Icons.person),
-              title: Text('You are ${user.email}'),
+              title: Text(context.tr('sec.you', {'email': user.email})),
               subtitle: Text(
-                'Role ${user.role}. Requests are sent with your own token. '
-                '${_ctx != null ? 'Victim: ${_ctx!.victimEmail}, order #${_ctx!.victimOrderId.substring(0, 8)}' : 'The victim is another demo customer.'}',
+                '${context.tr('sec.role', {'role': context.role(user.role)})} '
+                '${_ctx != null ? context.tr('sec.victim', {'email': _ctx!.victimEmail, 'id': '#${_ctx!.victimOrderId.substring(0, 8)}'}) : context.tr('sec.victimUnknown')}',
               ),
             ),
           ),
@@ -156,7 +158,7 @@ class _SecurityTestScreenState extends State<SecurityTestScreen> {
               color: passed == ran.length ? Colors.green.shade50 : Colors.red.shade50,
               child: ListTile(
                 leading: Icon(passed == ran.length ? Icons.verified_user : Icons.gpp_bad, color: passed == ran.length ? Colors.green : Colors.red),
-                title: Text('$passed / ${ran.length} behaved as expected'),
+                title: Text(context.tr('sec.result', {'passed': passed, 'total': ran.length})),
               ),
             ),
           for (var i = 0; i < _scenarios.length; i++) _tile(i, user),
@@ -165,7 +167,7 @@ class _SecurityTestScreenState extends State<SecurityTestScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _running ? null : _runAll,
         icon: _running ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_arrow),
-        label: Text(_running ? 'Running…' : 'Run all'),
+        label: Text(context.tr(_running ? 'sec.running' : 'sec.runAll')),
       ),
     );
   }
@@ -182,23 +184,32 @@ class _SecurityTestScreenState extends State<SecurityTestScreen> {
         leading: r == null
             ? Icon(expected == null ? Icons.remove_circle_outline : Icons.circle_outlined, color: Colors.grey)
             : Icon(pass ? Icons.check_circle : Icons.cancel, color: pass ? Colors.green : Colors.red),
-        title: Text(s.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        title: Text(context.tr(s.title), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         subtitle: Text(
           expected == null
-              ? 'Skipped for admins (would change real data)'
-              : '${s.method} · expect $expected${r != null ? ' · got ${r.status} (${r.ms} ms)' : ''}\n${s.why}',
+              ? context.tr('sec.skipped')
+              : [
+                  '${context.tr('sec.expect', {'method': s.method, 'expected': expected})} (${context.tr('code.$expected')})',
+                  if (r != null) '${context.tr('sec.got', {'status': r.status, 'ms': r.ms})} (${context.tr('code.${r.status}')})',
+                  context.tr(s.why),
+                ].join('\n'),
           style: const TextStyle(fontSize: 12),
         ),
         children: [
           if (r != null)
             Container(
               width: double.infinity,
+              alignment: Alignment.centerLeft,
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8)),
-              child: Text(
-                'HTTP ${r.status}\n${const JsonEncoder.withIndent('  ').convert(r.body)}',
-                style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 11),
+              // The raw server response stays left-to-right even in Arabic.
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(
+                  'HTTP ${r.status}\n${const JsonEncoder.withIndent('  ').convert(r.body)}',
+                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 11),
+                ),
               ),
             ),
         ],

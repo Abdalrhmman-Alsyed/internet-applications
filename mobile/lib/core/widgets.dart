@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'i18n.dart';
 import 'network/api_client.dart';
 
 String money(double v) => '\$${v.toStringAsFixed(2)}';
@@ -51,7 +52,7 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-      child: Text(status, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+      child: Text(context.status(status), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -73,12 +74,12 @@ class ErrorView extends StatelessWidget {
           children: [
             Icon(e?.statusCode == 403 ? Icons.block : Icons.cloud_off, size: 48, color: Colors.red.shade300),
             const SizedBox(height: 12),
-            Text(e != null ? '${e.statusCode} ${e.error ?? ''}' : 'Error', style: Theme.of(context).textTheme.titleMedium),
+            Text(e != null ? '${e.statusCode} ${e.error ?? ''}' : context.tr('error'), style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(e?.message ?? '$error', textAlign: TextAlign.center),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
-              OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+              OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: Text(context.tr('retry'))),
             ],
           ],
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets.dart';
@@ -43,7 +44,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.admin ? 'All orders' : 'My orders'),
+        title: Text(context.tr(widget.admin ? 'orders.all' : 'orders.mine')),
         bottom: widget.admin
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(48),
@@ -57,7 +58,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: ChoiceChip(
-                            label: Text(s ?? 'All'),
+                            label: Text(s == null ? context.tr('all') : context.status(s)),
                             selected: _status == s,
                             onSelected: (_) {
                               _status = s;
@@ -80,7 +81,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final orders = snap.data!;
             if (orders.isEmpty) {
-              return ListView(children: const [SizedBox(height: 160), EmptyView(icon: Icons.receipt_long_outlined, text: 'No orders yet')]);
+              return ListView(children: [const SizedBox(height: 160), EmptyView(icon: Icons.receipt_long_outlined, text: context.tr('orders.empty'))]);
             }
             return ListView.separated(
               padding: const EdgeInsets.all(12),
@@ -101,7 +102,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         StatusChip(o.status),
                       ],
                     ),
-                    subtitle: Text('${o.itemCount} item(s) · ${money(o.total)}\n${formatDate(o.createdAt)}'),
+                    subtitle: Text('${context.tr('orders.summary', {'n': o.itemCount, 'total': money(o.total)})}\n${formatDate(o.createdAt)}'),
                     isThreeLine: true,
                     onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailsScreen(o.id, admin: widget.admin)));

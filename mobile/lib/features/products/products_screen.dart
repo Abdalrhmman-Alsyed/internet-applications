@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets.dart';
@@ -88,8 +89,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Shop'),
+        title: Text(context.tr('shop.title')),
         actions: [
+          const LanguageButton(),
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort),
             initialValue: _sort,
@@ -97,11 +99,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
               _sort = v;
               _reload();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'newest', child: Text('Newest')),
-              PopupMenuItem(value: 'price_asc', child: Text('Price: low to high')),
-              PopupMenuItem(value: 'price_desc', child: Text('Price: high to low')),
-              PopupMenuItem(value: 'name', child: Text('Name')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'newest', child: Text(context.tr('sort.newest'))),
+              PopupMenuItem(value: 'price_asc', child: Text(context.tr('sort.priceAsc'))),
+              PopupMenuItem(value: 'price_desc', child: Text(context.tr('sort.priceDesc'))),
+              PopupMenuItem(value: 'name', child: Text(context.tr('sort.name'))),
             ],
           ),
         ],
@@ -114,7 +116,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 child: TextField(
                   controller: _search,
                   decoration: InputDecoration(
-                    hintText: 'Search products',
+                    hintText: context.tr('shop.search'),
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
                     isDense: true,
@@ -132,7 +134,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   children: [
-                    _chip(null, 'All'),
+                    _chip(null, context.tr('all')),
                     for (final c in _categories) _chip(c.id, c.name),
                   ],
                 ),
@@ -161,7 +163,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     if (_error != null && _products.isEmpty) return ErrorView(_error!, onRetry: _reload);
     if (_products.isEmpty && _loading) return const Center(child: CircularProgressIndicator());
     if (_products.isEmpty) {
-      return ListView(children: const [SizedBox(height: 120), EmptyView(icon: Icons.search_off, text: 'No products found')]);
+      return ListView(children: [const SizedBox(height: 120), EmptyView(icon: Icons.search_off, text: context.tr('shop.empty'))]);
     }
     return GridView.builder(
       controller: _scroll,
@@ -215,7 +217,7 @@ class _ProductCard extends StatelessWidget {
                         ? null
                         : () {
                             context.read<CartController>().add(product);
-                            showSuccess('Added ${product.name} to cart');
+                            showSuccess(context.tr('cart.added', {'name': product.name}));
                           },
                     icon: Badge(
                       isLabelVisible: inCart > 0,

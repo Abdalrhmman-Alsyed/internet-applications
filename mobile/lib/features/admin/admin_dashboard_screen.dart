@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets.dart';
@@ -36,7 +37,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
+      appBar: AppBar(title: Text(context.tr('nav.dashboard'))),
       body: RefreshIndicator(
         onRefresh: () async => _refresh(),
         child: FutureBuilder(
@@ -52,11 +53,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               children: [
                 Row(
                   children: [
-                    Expanded(child: _Kpi('Revenue', money((stats['revenue'] as num).toDouble()), Icons.payments_outlined, Colors.green)),
+                    Expanded(child: _Kpi(context.tr('admin.revenue'), money((stats['revenue'] as num).toDouble()), Icons.payments_outlined, Colors.green)),
                     const SizedBox(width: 8),
-                    Expanded(child: _Kpi('Orders', '$total', Icons.receipt_long_outlined, Colors.indigo)),
+                    Expanded(child: _Kpi(context.tr('admin.orders'), '$total', Icons.receipt_long_outlined, Colors.indigo)),
                     const SizedBox(width: 8),
-                    Expanded(child: _Kpi('Pending', '${byStatus['PENDING']}', Icons.hourglass_top, Colors.orange)),
+                    Expanded(child: _Kpi(context.tr('admin.pending'), '${byStatus['PENDING']}', Icons.hourglass_top, Colors.orange)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -66,7 +67,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Orders by status', style: Theme.of(context).textTheme.titleMedium),
+                        Text(context.tr('admin.byStatus'), style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 12),
                         for (final s in orderStatuses) ...[
                           Row(children: [StatusChip(s), const Spacer(), Text('${byStatus[s]}', style: const TextStyle(fontWeight: FontWeight.bold))]),
@@ -90,14 +91,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                        child: Text('Low stock (≤ 5)', style: Theme.of(context).textTheme.titleMedium),
+                        child: Text(context.tr('admin.lowStock'), style: Theme.of(context).textTheme.titleMedium),
                       ),
-                      if (lowStock.isEmpty) const ListTile(title: Text('All products are well stocked')),
+                      if (lowStock.isEmpty) ListTile(title: Text(context.tr('admin.wellStocked'))),
                       for (final p in lowStock)
                         ListTile(
                           leading: ProductImage(p.image, size: 40, radius: 8),
                           title: Text(p.name),
-                          trailing: Text('${p.stock} left', style: TextStyle(color: p.stock == 0 ? Colors.red : Colors.orange, fontWeight: FontWeight.bold)),
+                          trailing: Text(context.tr('admin.left', {'n': p.stock}), style: TextStyle(color: p.stock == 0 ? Colors.red : Colors.orange, fontWeight: FontWeight.bold)),
                         ),
                     ],
                   ),

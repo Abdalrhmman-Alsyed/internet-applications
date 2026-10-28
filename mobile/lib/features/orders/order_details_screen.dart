@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets.dart';
@@ -56,19 +57,20 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Future<void> _cancel() async {
+    final done = context.tr('order.cancelled');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel order?'),
-        content: const Text('The items go back to stock.'),
+        title: Text(context.tr('order.cancelQ')),
+        content: Text(context.tr('order.cancelBody')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Cancel order')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('keep'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(context.tr('order.cancel'))),
         ],
       ),
     );
     if (ok == true) {
-      await _act('cancel', () => _api.post<Map<String, dynamic>>('/orders/${widget.orderId}/cancel'), 'Order cancelled');
+      await _act('cancel', () => _api.post<Map<String, dynamic>>('/orders/${widget.orderId}/cancel'), done);
     }
   }
 
@@ -84,7 +86,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
     final o = _order;
     return Scaffold(
-      appBar: AppBar(title: Text(o?.shortId ?? 'Order')),
+      appBar: AppBar(title: Text(o?.shortId ?? context.tr('order.title'))),
       body: _error != null
           ? ErrorView(_error!, onRetry: _load)
           : o == null
@@ -100,7 +102,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(children: [Text('Status', style: TextStyle(color: Colors.grey.shade600)), const Spacer(), StatusChip(o.status)]),
+                              Row(children: [Text(context.tr('order.status'), style: TextStyle(color: Colors.grey.shade600)), const Spacer(), StatusChip(o.status)]),
                               const Divider(height: 24),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,9 +112,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                   Expanded(child: Text(o.shippingAddress)),
                                 ],
                               ),
-                              if (o.note != null) ...[const SizedBox(height: 6), Text('Note: ${o.note}', style: TextStyle(color: Colors.grey.shade700))],
+                              if (o.note != null) ...[const SizedBox(height: 6), Text(context.tr('order.note', {'note': o.note}), style: TextStyle(color: Colors.grey.shade700))],
                               const SizedBox(height: 6),
-                              Text('Placed ${formatDate(o.createdAt)}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                              Text(context.tr('order.placed', {'date': formatDate(o.createdAt)}), style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                             ],
                           ),
                         ),
@@ -129,14 +131,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                               ),
                             const Divider(height: 1),
                             ListTile(
-                              title: const Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
+                              title: Text(context.tr('order.total'), style: const TextStyle(fontWeight: FontWeight.bold)),
                               trailing: Text(money(o.total), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text('Tracking', style: Theme.of(context).textTheme.titleMedium),
+                      Text(context.tr('order.tracking'), style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 8),
                       _Timeline(o),
                       const SizedBox(height: 24),
@@ -160,9 +162,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               ),
               onPressed: _busy != null
                   ? null
-                  : () => _act(next, () => _api.patch<Map<String, dynamic>>('/orders/${o.id}/status', data: {'status': next}), 'Order → $next (customer notified)'),
+                  : () => _act(next, () => _api.patch<Map<String, dynamic>>('/orders/${o.id}/status', data: {'status': next}), context.tr('order.moved', {'status': context.status(next)})),
               icon: Icon(statusIcon(next)),
-              label: Text(next == 'CANCELLED' ? 'Cancel order' : 'Mark as $next'),
+              label: Text(next == 'CANCELLED' ? context.tr('order.cancel') : context.tr('order.markAs', {'status': context.status(next)})),
             ),
           ),
       ];
@@ -173,7 +175,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           style: OutlinedButton.styleFrom(foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(vertical: 12)),
           onPressed: _busy != null ? null : _cancel,
           icon: const Icon(Icons.cancel_outlined),
-          label: const Text('Cancel order'),
+          label: Text(context.tr('order.cancel')),
         ),
       ];
     }
@@ -216,7 +218,7 @@ class _Timeline extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(steps[i], style: TextStyle(fontWeight: FontWeight.w600, color: reached.containsKey(steps[i]) ? null : Colors.grey)),
+                        Text(context.status(steps[i]), style: TextStyle(fontWeight: FontWeight.w600, color: reached.containsKey(steps[i]) ? null : Colors.grey)),
                         if (reached[steps[i]] != null)
                           Text(
                             [formatDate(reached[steps[i]]!.createdAt), if (reached[steps[i]]!.note != null) reached[steps[i]]!.note!].join(' · '),

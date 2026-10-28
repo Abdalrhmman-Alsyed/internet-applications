@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/i18n.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets.dart';
@@ -88,7 +89,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Text(p.description.isEmpty ? 'No description.' : p.description, style: theme.textTheme.bodyLarge),
+                Text(p.description.isEmpty ? context.tr('product.noDescription') : p.description, style: theme.textTheme.bodyLarge),
               ],
             ),
           ),
@@ -110,11 +111,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ? null
                       : () {
                           context.read<CartController>().add(p, _qty);
-                          showSuccess('Added $_qty × ${p.name} to cart');
+                          showSuccess(context.tr('cart.addedQty', {'qty': _qty, 'name': p.name}));
                           Navigator.pop(context);
                         },
                   icon: const Icon(Icons.add_shopping_cart),
-                  label: Text(p.stock == 0 ? 'Out of stock' : maxQty <= 0 ? 'All in cart' : 'Add to cart'),
+                  label: Text(p.stock == 0 ? context.tr('stock.out') : maxQty <= 0 ? context.tr('cart.allIn') : context.tr('cart.add')),
                 ),
               ),
             ],
@@ -133,10 +134,10 @@ class _StockLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, text) = stock == 0
-        ? (Colors.red, 'Out of stock')
+        ? (Colors.red, context.tr('stock.out'))
         : stock <= 5
-            ? (Colors.orange, 'Only $stock left')
-            : (Colors.green, 'In stock ($stock)');
+            ? (Colors.orange, context.tr('stock.few', {'n': stock}))
+            : (Colors.green, context.tr('stock.in', {'n': stock}));
     return Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600));
   }
 }
