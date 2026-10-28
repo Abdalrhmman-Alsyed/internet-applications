@@ -9,6 +9,7 @@
 | تطبيق الموبايل (متجر للزبون + وضع إدارة للأدمن) | Flutter | [`mobile/`](mobile/) |
 | التوثيق | Swagger + Postman + المعمارية | [`docs/`](docs/) |
 
+- 📖 **شرح المشروع للفريق (كيف بيشتغل كل جزء):** [docs/README.md](docs/README.md)
 - 🎤 **سيناريو العرض قدام المعيد خطوة بخطوة:** [docs/DEMO.md](docs/DEMO.md)
 - 📐 المعمارية وأسباب كل قرار: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - ✅ المتطلبات، وين تحققت، وكيف منثبتها: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
