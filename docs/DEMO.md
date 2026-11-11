@@ -102,7 +102,34 @@ cd backend && npm run seed
    الرد **503** خلال ثانيتين: "Inventory service is unreachable"، مش انتظار للأبد. والمنتجات لسا بتنعرض، والموبايل بيكتب "معلومات المخزون غير متاحة حالياً". بعدها رجّعها: `docker compose up -d inventory-service`.
 6. **(اختياري) خدمة بطيئة:** بـ PowerShell `$env:INVENTORY_LATENCY_MS=3000; docker compose up -d inventory-service`، والطلب بيرجع **504** بعد ثانيتين بالضبط. ورجّعها: `Remove-Item Env:INVENTORY_LATENCY_MS; docker compose up -d inventory-service`.
 
-## 5. أسئلة متوقعة
+## 5. المتطلب الثالث: الأداء والتخزين المؤقت
+
+التفاصيل والأرقام والأسئلة المتوقعة: [REQUIREMENT-3-PERFORMANCE.md](REQUIREMENT-3-PERFORMANCE.md).
+
+1. **حجم البيانات:** بـ pgAdmin أو psql: `SELECT count(*) FROM orders;` ← حوالي 300 ألف.
+2. **جدول قبل وبعد:**
+   ```bash
+   cd backend
+   npm run perf:compare
+   ```
+   p95: 848 ms ← 136 ms، والطلبات/ثانية ×3.
+3. **EXPLAIN:** بـ orders_db شغّل:
+   ```sql
+   EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'PENDING' ORDER BY "createdAt" DESC LIMIT 20;
+   ```
+   بيطلع `Index Scan using "orders_status_createdAt_idx"` وأقل من 1 ms. احكي إنو كان 18 ms مع Sort على 42 ألف صف.
+4. **Redis:** `docker compose exec redis redis-cli --scan --pattern 'catalog:*'` بيعرض المفاتيح. و `redis-cli INFO stats` بيعرض الإصابات.
+5. **ETag:** افتح منتج مرتين بالمتصفح (DevTools ← Network)، المرة التانية **304**. أو بـ curl مع `If-None-Match`.
+6. **تعديل منتج بيظهر فوراً:** عدّل سعر من اللوحة، وافتحه بالموبايل، السعر الجديد مباشرة.
+7. **نسخة القراءة و read-your-writes (الأقوى):**
+   ```powershell
+   $env:REPLICA_DELAY_MS=3000; docker compose up -d postgres-replica
+   cd backend; npm run perf:ryw
+   ```
+   بيبيّن إنو النسخة متأخرة فعلاً، وأحمد بيشوف طلبه فوراً، والأدمن ما بيشوفه لسا. بعدها رجّعها: `Remove-Item Env:REPLICA_DELAY_MS; docker compose up -d postgres-replica`.
+8. **(إذا في وقت) اختبار ضغط مباشر:** `npm run perf:test -- live` (دقيقة).
+
+## 6. أسئلة متوقعة
 
 | السؤال | الجواب |
 |---|---|

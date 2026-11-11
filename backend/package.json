@@ -13,7 +13,11 @@
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "seed": "node scripts/seed.mjs",
     "demo:race": "node scripts/demo-inventory.mjs race",
-    "demo:order": "node scripts/demo-inventory.mjs order"
+    "demo:order": "node scripts/demo-inventory.mjs order",
+    "perf:data": "node scripts/perf/bulk-data.mjs",
+    "perf:test": "node scripts/perf/load-test.mjs",
+    "perf:ryw": "node scripts/perf/read-your-writes.mjs",
+    "perf:compare": "node scripts/perf/compare.mjs"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.11.3",
@@ -34,6 +38,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "helmet": "^8.1.0",
+    "ioredis": "^5.4.1",
     "minio": "^8.0.5",
     "prisma": "~6.16.0",
     "reflect-metadata": "^0.2.2",

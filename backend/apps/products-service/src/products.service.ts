@@ -1,8 +1,9 @@
-import { EVENTS, EVENTS_BUS, InventoryClient, paginate, ProductLowStockEvent } from '@app/common';
+import { CacheService, EVENTS, EVENTS_BUS, InventoryClient, paginate, ProductLowStockEvent } from '@app/common';
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { Prisma } from '@prisma-clients/products';
 import { PrismaService } from './prisma.service';
+import { ReplicaPrismaService } from './replica-prisma.service';
 import { StorageService } from './storage.service';
 
 const MAX_IMAGES_PER_PRODUCT = 8;
@@ -15,16 +16,23 @@ const productInclude = {
 
 type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 
+/** Catalogue data as it is cached: plain JSON, no stock. */
+type CatalogProduct = Omit<ProductWithRelations, 'price'> & { price: number };
+const toCatalog = (p: ProductWithRelations): CatalogProduct => ({ ...p, price: p.price.toNumber() });
+
+/**
+ * Redis policy for the catalogue (see docs/REQUIREMENT-3-PERFORMANCE.md):
+ *  - cached: product data, product pages, categories (read a lot, change rarely)
+ *  - never cached: stock (changes with every order; a stale number would oversell)
+ *  - TTL: 60 s, and every write bumps the "catalog" version so old keys are never read again
+ */
+const CATALOG_TTL_SECONDS = 60;
+
 /**
  * `stock` comes from inventory-service. If it can't be reached, products are still
  * shown with stock 0 and `inventoryAvailable: false`, so browsing keeps working.
  */
-const toDto = (p: ProductWithRelations, stock: number, inventoryAvailable: boolean) => ({
-  ...p,
-  price: p.price.toNumber(),
-  stock,
-  inventoryAvailable,
-});
+const toDto = (p: CatalogProduct, stock: number, inventoryAvailable: boolean) => ({ ...p, stock, inventoryAvailable });
 
 export interface FindProductsQuery {
   page?: number;
@@ -59,10 +67,30 @@ export class ProductsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly replica: ReplicaPrismaService,
     private readonly storage: StorageService,
     private readonly inventory: InventoryClient,
+    private readonly cache: CacheService,
     @Inject(EVENTS_BUS) private readonly events: ClientProxy,
   ) {}
+
+  private async catalogKey(suffix: string) {
+    return `catalog:v${await this.cache.version('catalog')}:${suffix}`;
+  }
+
+  /**
+   * Called after every catalogue write: all cached pages and products become stale at
+   * once, and for a few seconds the catalogue is read from the primary, so neither the
+   * cache nor the (slightly behind) replica can bring back the old version.
+   */
+  private async invalidateCatalog() {
+    await Promise.all([this.cache.bump('catalog'), this.cache.markFresh('catalog')]);
+  }
+
+  /** The read replica, except just after a catalogue change (then the primary). */
+  private async reader() {
+    return (await this.cache.isFresh('catalog')) ? this.prisma : this.replica;
+  }
 
   async findAll(q: FindProductsQuery) {
     const page = q.page ?? 1;
@@ -95,16 +123,36 @@ export class ProductsService {
       : q.sort === 'name' ? { name: 'asc' }
       : { createdAt: 'desc' };
 
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.product.findMany({ where, orderBy, skip: (page - 1) * limit, take: limit, include: productInclude }),
-      this.prisma.product.count({ where }),
-    ]);
+    const loadPage = async () => {
+      const db = await this.reader();
+      const [items, total] = await db.$transaction([
+        db.product.findMany({ where, orderBy, skip: (page - 1) * limit, take: limit, include: productInclude }),
+        db.product.count({ where }),
+      ]);
+      return { items: items.map(toCatalog), total };
+    };
+    // Admin views (hidden products) and stock filters depend on live data: not cached.
+    const cacheable = !q.includeInactive && !stockIds;
+    const { items, total } = cacheable
+      ? await this.cache.getOrSet(await this.catalogKey(`list:${JSON.stringify(q)}`), CATALOG_TTL_SECONDS, loadPage)
+      : await loadPage();
     return paginate(await this.withStock(items), total, page, limit);
   }
 
   async findOne(id: string, includeInactive = false) {
-    const product = await this.load(id, includeInactive);
+    const product = includeInactive
+      ? await this.findCatalogProduct(id)
+      : await this.cache.getOrSet(await this.catalogKey(`product:${id}`), CATALOG_TTL_SECONDS, () => this.findCatalogProduct(id));
+    if (!product || (!product.isActive && !includeInactive)) throw new NotFoundException('Product not found');
     return (await this.withStock([product]))[0];
+  }
+
+  private async findCatalogProduct(id: string): Promise<CatalogProduct | null> {
+    const db = await this.reader();
+    let product = await db.product.findUnique({ where: { id }, include: productInclude });
+    // A miss on the replica may only mean "not replicated yet": check the primary.
+    if (!product && db !== this.prisma) product = await this.prisma.product.findUnique({ where: { id }, include: productInclude });
+    return product && toCatalog(product);
   }
 
   /**
@@ -135,7 +183,8 @@ export class ProductsService {
     // A product without a stock record would be unsellable; undo the insert if inventory refuses.
     try {
       const stock = await this.inventory.setStock(product.id, { quantity: dto.stock ?? 0 });
-      return toDto(product, stock, true);
+      await this.invalidateCatalog();
+      return toDto(toCatalog(product), stock, true);
     } catch (err) {
       await this.prisma.product.delete({ where: { id: product.id } });
       throw err;
@@ -147,6 +196,7 @@ export class ProductsService {
     await this.load(id, true);
     await this.assertCategory(data.categoryId);
     await this.prisma.product.update({ where: { id }, data });
+    await this.invalidateCatalog();
     if (stock !== undefined) {
       await this.inventory.setStock(id, { quantity: stock });
     }
@@ -158,6 +208,7 @@ export class ProductsService {
   async remove(id: string) {
     await this.load(id, true);
     await this.prisma.product.update({ where: { id }, data: { isActive: false } });
+    await this.invalidateCatalog();
     return { success: true };
   }
 
@@ -169,6 +220,7 @@ export class ProductsService {
     }
     const { key, url } = await this.storage.upload(productId, Buffer.from(file.base64, 'base64'), file.mimetype);
     await this.prisma.productImage.create({ data: { productId, key, url, position: count } });
+    await this.invalidateCatalog();
     return this.findOne(productId, true);
   }
 
@@ -177,6 +229,7 @@ export class ProductsService {
     if (!image) throw new NotFoundException('Image not found');
     await this.prisma.productImage.delete({ where: { id: imageId } });
     await this.storage.remove(image.key);
+    await this.invalidateCatalog();
     return this.findOne(productId, true);
   }
 
@@ -201,8 +254,8 @@ export class ProductsService {
     return product;
   }
 
-  /** Adds stock to products with a single CheckStock call for the whole page (no N+1). */
-  private async withStock(products: ProductWithRelations[]) {
+  /** Adds live stock with a single CheckStock call for the whole page (no N+1). */
+  private async withStock(products: CatalogProduct[]) {
     try {
       const stock = await this.inventory.checkStock(products.map((p) => p.id));
       return products.map((p) => toDto(p, stock.get(p.id) ?? 0, true));

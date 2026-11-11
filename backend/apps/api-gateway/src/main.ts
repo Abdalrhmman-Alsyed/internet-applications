@@ -9,6 +9,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
+  // HTTP caching is opt-in: Express's automatic ETag is off, and every response is
+  // "no-store" (orders, users, tokens must never sit in a shared cache) unless a route
+  // uses ETagInterceptor (the public catalogue).
+  app.getHttpAdapter().getInstance().set('etag', false);
+  app.use((_req: unknown, res: { setHeader(name: string, value: string): void }, next: () => void) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
   app.enableCors({
     origin: (process.env.CORS_ORIGINS ?? 'http://localhost:3001').split(','),
     credentials: true,

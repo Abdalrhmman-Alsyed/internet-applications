@@ -24,6 +24,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CurrentUser, Public, Roles } from '../common/decorators';
+import { ETagInterceptor } from '../common/etag.interceptor';
 import { assertImage, MAX_IMAGE_BYTES } from './image-validation';
 import { CreateCategoryDto, CreateProductDto, ProductsQueryDto, UpdateProductDto, UpdateStockDto } from './products.dto';
 
@@ -35,6 +36,7 @@ export class CategoriesController {
   constructor(@Inject(PRODUCTS_SERVICE) private readonly products: ClientProxy) {}
 
   @Public()
+  @UseInterceptors(ETagInterceptor)
   @Get()
   @ApiOperation({ summary: 'List categories' })
   findAll() {
@@ -65,6 +67,7 @@ export class ProductsController {
   constructor(@Inject(PRODUCTS_SERVICE) private readonly products: ClientProxy) {}
 
   @Public()
+  @UseInterceptors(ETagInterceptor)
   @Get()
   @ApiOperation({ summary: 'List products: pagination, search, category/price filters, sorting' })
   findAll(@Query() query: ProductsQueryDto, @CurrentUser() user?: AuthUser) {
@@ -73,6 +76,7 @@ export class ProductsController {
   }
 
   @Public()
+  @UseInterceptors(ETagInterceptor)
   @Get(':id')
   @ApiOperation({ summary: 'Product details with images' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user?: AuthUser) {

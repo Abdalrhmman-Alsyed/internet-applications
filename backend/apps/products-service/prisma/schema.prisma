@@ -34,6 +34,7 @@ model Product {
 
   @@index([categoryId])
   @@index([isActive, createdAt])
+  // + trigram GIN indexes on name and description for search (migration 0003, raw SQL)
   @@map("products")
 }
 

@@ -11,6 +11,10 @@ x-backend-env: &backend-env
   PRODUCTS_HOST: products-service
   ORDERS_HOST: orders-service
   NOTIFICATIONS_HOST: notifications-service
+  REDIS_URL: redis://redis:6379
+  # Read-your-writes: after a write, that user's reads use the primary for this long.
+  # Must be longer than the replica can lag (normally milliseconds).
+  FRESH_WINDOW_SECONDS: ${FRESH_WINDOW_SECONDS:-5}
   INVENTORY_GRPC_URL: inventory-service:50051
   INVENTORY_DEADLINE_MS: ${INVENTORY_DEADLINE_MS:-2000}
 
@@ -22,9 +26,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app_password}
       POSTGRES_DB: postgres
+    # Primary: every write goes here. Its pg_hba lets the read replica stream from it.
+    command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf", "-c", "wal_level=replica", "-c", "max_wal_senders=10"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./docker/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     ports:
       - "5433:5432"
     healthcheck:
@@ -45,6 +52,41 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 10s
+      retries: 10
+
+  # Read replica (hot standby): a live copy of the primary, used for reads only.
+  # Demo of replica lag: REPLICA_DELAY_MS=3000 docker compose up -d postgres-replica
+  postgres-replica:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "/replica-entrypoint.sh"]
+    environment:
+      PRIMARY_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app_password}
+      REPLICA_DELAY_MS: ${REPLICA_DELAY_MS:-0}
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./docker/postgres/replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    ports:
+      - "5440:5432" # read-only, e.g. pgAdmin "localhost:5440"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Cache only (no persistence): if it is emptied or down, the app reads the database.
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 10
 
   minio:
@@ -77,6 +119,9 @@ services:
       <<: *backend-env
       PORT: 3000
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001}
+      # Per IP per minute. A load test sends everything from one IP, so it raises this
+      # (npm run perf:test does it for you, then puts it back).
+      RATE_LIMIT: ${RATE_LIMIT:-300}
       # Read-only queue stats for the dashboard's System page
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       RABBITMQ_USER: ${RABBITMQ_USER:-app}
@@ -140,6 +185,7 @@ services:
     environment:
       <<: *backend-env
       PRODUCTS_DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@postgres:5432/products_db
+      PRODUCTS_REPLICA_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@postgres-replica:5432/products_db
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
@@ -149,6 +195,8 @@ services:
       LOW_STOCK_THRESHOLD: 5
     depends_on:
       postgres: { condition: service_healthy }
+      postgres-replica: { condition: service_healthy }
+      redis: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
       minio: { condition: service_healthy }
     restart: unless-stopped
@@ -163,9 +211,12 @@ services:
     environment:
       <<: *backend-env
       ORDERS_DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@postgres:5432/orders_db
+      ORDERS_REPLICA_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@postgres-replica:5432/orders_db
       LOW_STOCK_THRESHOLD: 5
     depends_on:
       postgres: { condition: service_healthy }
+      postgres-replica: { condition: service_healthy }
+      redis: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     restart: unless-stopped
 
@@ -205,4 +256,5 @@ services:
 
 volumes:
   postgres_data:
+  postgres_replica_data:
   minio_data:

@@ -29,8 +29,9 @@ model Order {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  @@index([userId, createdAt])
-  @@index([status])
+  @@index([userId, createdAt]) // "my orders", newest first
+  @@index([status, createdAt(sort: Desc)]) // admin list filtered by status, newest first: no sort step
+  @@index([createdAt]) // dashboard "last 7 days"
   @@map("orders")
 }
 
