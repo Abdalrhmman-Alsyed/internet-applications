@@ -11,9 +11,13 @@
     "postinstall": "npm run prisma:generate",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "demo:race": "node scripts/demo-inventory.mjs race",
+    "demo:order": "node scripts/demo-inventory.mjs order"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.11.3",
+    "@grpc/proto-loader": "^0.7.13",
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",
     "@nestjs/jwt": "^11.0.0",

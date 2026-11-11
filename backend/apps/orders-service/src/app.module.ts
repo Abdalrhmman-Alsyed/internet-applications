@@ -1,4 +1,4 @@
-import { eventsBusClient, PRODUCTS_SERVICE, tcpClient } from '@app/common';
+import { eventsBusClient, InventoryClient, PRODUCTS_SERVICE, tcpClient } from '@app/common';
 import { Module } from '@nestjs/common';
 import { ClientsModule } from '@nestjs/microservices';
 import { OrdersController } from './orders.controller';
@@ -8,6 +8,6 @@ import { PrismaService } from './prisma.service';
 @Module({
   imports: [ClientsModule.register([tcpClient(PRODUCTS_SERVICE, 'products'), eventsBusClient()])],
   controllers: [OrdersController],
-  providers: [PrismaService, OrdersService],
+  providers: [PrismaService, OrdersService, InventoryClient],
 })
 export class AppModule {}

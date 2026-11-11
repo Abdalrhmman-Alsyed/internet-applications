@@ -18,7 +18,7 @@
 |---|---|---|
 | اللغة والإطار | NestJS 11 + TypeScript | — |
 | تقسيم الكود لأربع وحدات منفصلة | 4 خدمات مستقلة: `users`، `products`، `orders`، `notifications`، كل وحدة بقاعدة بياناتها | `docker compose ps` / `GET /health` |
-| يعمل كاملاً بـ Docker | `docker compose up -d --build` يشغّل 9 حاويات | تشغيل حي |
+| يعمل كاملاً بـ Docker | `docker compose up -d --build` يشغّل 10 حاويات (منها inventory-service بـ Go) | تشغيل حي |
 | REST للمنتجات (إضافة مع صورة، عرض، تصفية حسب التصنيف، تقسيم صفحات) | `GET /products?categoryId=&minPrice=&maxPrice=&search=&inStock=&sort=&page=&limit=` | اختبار `anyone can browse with filters and pagination` |
 | REST للطلبات (إنشاء، عرض، تغيير حالة) | `POST /orders`، `GET /orders(/:id)`، `PATCH /orders/:id/status` | Postman مجلد 3 |
 | إصدار في المسار | `/api/v1/...` | — |

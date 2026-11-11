@@ -43,8 +43,8 @@ export const PATTERNS = {
     addImage: 'products.add_image',
     removeImage: 'products.remove_image',
     updateStock: 'products.update_stock',
-    reserveStock: 'products.reserve_stock',
-    releaseStock: 'products.release_stock',
+    /** Names and current prices for an order (stock itself lives in inventory-service). */
+    forOrder: 'products.for_order',
   },
   orders: {
     create: 'orders.create',

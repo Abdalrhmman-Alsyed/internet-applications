@@ -1,4 +1,5 @@
 import {
+  InventoryClient,
   NOTIFICATIONS_SERVICE,
   ORDERS_SERVICE,
   PATTERNS,
@@ -23,17 +24,25 @@ export class HealthService {
     @Inject(PRODUCTS_SERVICE) products: ClientProxy,
     @Inject(ORDERS_SERVICE) orders: ClientProxy,
     @Inject(NOTIFICATIONS_SERVICE) notifications: ClientProxy,
+    private readonly inventory: InventoryClient,
   ) {
     this.services = { users, products, orders, notifications };
   }
 
-  /** Pings every service over TCP and measures the round trip. */
+  /** Pings every service (TCP, and gRPC for inventory) and measures the round trip. */
   async check(): Promise<Record<string, ServiceStatus>> {
+    const probes: [string, () => Promise<unknown>][] = [
+      ...Object.entries(this.services).map(([name, client]): [string, () => Promise<unknown>] => [
+        name,
+        () => sendRpc(client, PATTERNS.health, {}, 2000),
+      ]),
+      ['inventory', () => this.inventory.ping(2000)],
+    ];
     const entries = await Promise.all(
-      Object.entries(this.services).map(async ([name, client]): Promise<[string, ServiceStatus]> => {
+      probes.map(async ([name, probe]): Promise<[string, ServiceStatus]> => {
         const started = Date.now();
         try {
-          await sendRpc(client, PATTERNS.health, {}, 2000);
+          await probe();
           return [name, { status: 'up', latencyMs: Date.now() - started }];
         } catch {
           return [name, { status: 'down' }];

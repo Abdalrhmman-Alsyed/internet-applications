@@ -2,7 +2,7 @@ import { PATTERNS } from '@app/common';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { CategoriesService } from './categories.service';
-import { FindProductsQuery, ImageUpload, ProductInput, ProductsService, StockItem } from './products.service';
+import { FindProductsQuery, ImageUpload, ProductInput, ProductsService } from './products.service';
 
 @Controller()
 export class ProductsController {
@@ -74,13 +74,8 @@ export class ProductsController {
   }
 
   // ─── Internal (called by orders-service only) ───
-  @MessagePattern(PATTERNS.products.reserveStock)
-  reserveStock(@Payload() { items }: { items: StockItem[] }) {
-    return this.products.reserveStock(items);
-  }
-
-  @MessagePattern(PATTERNS.products.releaseStock)
-  releaseStock(@Payload() { items }: { items: StockItem[] }) {
-    return this.products.releaseStock(items);
+  @MessagePattern(PATTERNS.products.forOrder)
+  forOrder(@Payload() { ids }: { ids: string[] }) {
+    return this.products.forOrder(ids);
   }
 }

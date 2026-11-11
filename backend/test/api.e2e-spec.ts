@@ -155,7 +155,7 @@ describe('E-commerce API (e2e)', () => {
       expect(stats.body.byStatus).toEqual(expect.objectContaining({ PENDING: expect.any(Number) }));
       const info = await api('GET', '/system/info', { token: adminToken });
       expect(info.status).toBe(200);
-      expect(Object.keys(info.body.services)).toEqual(['users', 'products', 'orders', 'notifications']);
+      expect(Object.keys(info.body.services)).toEqual(['users', 'products', 'orders', 'notifications', 'inventory']);
     });
 
     it('admin manages categories and products', async () => {
@@ -297,6 +297,45 @@ describe('E-commerce API (e2e)', () => {
       expect(attempts.filter((r) => r.status === 201)).toHaveLength(3);
       expect(attempts.filter((r) => r.status === 409)).toHaveLength(7);
       expect((await api('GET', `/products/${productId}`)).body.stock).toBe(0);
+    });
+  });
+
+  describe('Inventory service (Go, gRPC)', () => {
+    it('product details show the stock reported by inventory-service', async () => {
+      const res = await api('GET', `/products/${productId}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(expect.objectContaining({ stock: 0, inventoryAvailable: true }));
+    });
+
+    it('race for the last unit: exactly one order wins, the rest get a clear 409', async () => {
+      expect((await api('PATCH', `/products/${productId}/stock`, { token: adminToken, body: { stock: 1 } })).body.stock).toBe(1);
+      const attempts = await Promise.all(
+        Array.from({ length: 10 }, (_, i) =>
+          api('POST', '/orders', {
+            token: i % 2 ? alice.token : bob.token,
+            body: { items: [{ productId, quantity: 1 }], shippingAddress: 'Last unit street 1' },
+          }),
+        ),
+      );
+      expect(attempts.filter((r) => r.status === 201)).toHaveLength(1);
+      const rejected = attempts.filter((r) => r.status === 409);
+      expect(rejected).toHaveLength(9);
+      for (const r of rejected) {
+        expectErrorShape(r, 409);
+        expect(r.body.message).toMatch(/Insufficient stock for "Headphones/);
+      }
+      expect((await api('GET', `/products/${productId}`)).body.stock).toBe(0);
+    });
+
+    it('an order is all or nothing: one missing item reserves nothing', async () => {
+      await api('PATCH', `/products/${productId}/stock`, { token: adminToken, body: { stock: 5 } });
+      const other = await api('POST', '/products', { token: adminToken, body: { name: `Empty ${run}`, price: 1, stock: 0 } });
+      const res = await api('POST', '/orders', {
+        token: alice.token,
+        body: { items: [{ productId, quantity: 2 }, { productId: other.body.id, quantity: 1 }], shippingAddress: 'All or nothing 1' },
+      });
+      expectErrorShape(res, 409);
+      expect((await api('GET', `/products/${productId}`)).body.stock).toBe(5);
     });
   });
 

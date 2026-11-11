@@ -2,18 +2,24 @@ import {
   AuthUser,
   EVENTS,
   EVENTS_BUS,
+  InventoryClient,
+  InventoryException,
   OrderCreatedEvent,
   OrderStatus,
   OrderStatusChangedEvent,
   paginate,
   PATTERNS,
   PRODUCTS_SERVICE,
+  ProductLowStockEvent,
   Role,
   sendRpc,
+  StockItem,
 } from '@app/common';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -21,7 +27,10 @@ import {
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { Prisma } from '@prisma-clients/orders';
+import { randomUUID } from 'crypto';
 import { PrismaService } from './prisma.service';
+
+const LOW_STOCK_THRESHOLD = Number(process.env.LOW_STOCK_THRESHOLD ?? 5);
 
 /** Allowed status transitions; DELIVERED and CANCELLED are final. */
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -45,11 +54,10 @@ const toDto = (o: OrderWithRelations) => ({
   items: o.items.map((i) => ({ ...i, unitPrice: i.unitPrice.toNumber(), subtotal: i.unitPrice.toNumber() * i.quantity })),
 });
 
-interface ReservedItem {
+interface CatalogItem {
   productId: string;
   name: string;
   unitPrice: number;
-  quantity: number;
 }
 
 export interface CreateOrderPayload {
@@ -72,30 +80,45 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PRODUCTS_SERVICE) private readonly products: ClientProxy,
+    private readonly inventory: InventoryClient,
     @Inject(EVENTS_BUS) private readonly events: ClientProxy,
   ) {}
 
+  /**
+   * 1. products-service (TCP): names and current prices, never from the client.
+   * 2. inventory-service (gRPC): reserve every item at once, all or nothing.
+   * 3. Save the order. If that fails, release the reservation (compensation).
+   */
   async create(user: AuthUser, dto: CreateOrderPayload) {
     if (user.role !== Role.CUSTOMER) throw new ForbiddenException('Only customers can place orders');
 
-    // Prices and names come from products-service, never from the client.
-    const reserved = await sendRpc<ReservedItem[]>(this.products, PATTERNS.products.reserveStock, { items: dto.items });
-    const total = reserved.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+    const items = mergeItems(dto.items);
+    const catalog = await sendRpc<CatalogItem[]>(this.products, PATTERNS.products.forOrder, {
+      ids: items.map((i) => i.productId),
+    });
+    const byId = new Map(catalog.map((c) => [c.productId, c]));
+    const lines = items.map((i) => ({ ...byId.get(i.productId)!, quantity: i.quantity }));
+    const total = lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+
+    // The order id doubles as the reservation id, so a cancellation releases exactly this order.
+    const orderId = randomUUID();
+    const remaining = await this.reserve(orderId, items, byId);
 
     let order: OrderWithRelations;
     try {
       order = await this.prisma.order.create({
         data: {
+          id: orderId,
           userId: user.id,
           total,
           shippingAddress: dto.shippingAddress,
           note: dto.note,
           items: {
-            create: reserved.map((i) => ({
-              productId: i.productId,
-              productName: i.name,
-              unitPrice: i.unitPrice,
-              quantity: i.quantity,
+            create: lines.map((l) => ({
+              productId: l.productId,
+              productName: l.name,
+              unitPrice: l.unitPrice,
+              quantity: l.quantity,
             })),
           },
           history: { create: { status: OrderStatus.PENDING, changedBy: user.id } },
@@ -103,10 +126,8 @@ export class OrdersService {
         include: orderInclude,
       });
     } catch (err) {
-      // Compensation: give the stock back if the order couldn't be saved.
-      await sendRpc(this.products, PATTERNS.products.releaseStock, { items: dto.items }).catch((e) =>
-        this.logger.error(`Failed to release stock: ${e}`),
-      );
+      this.logger.error(`Order ${orderId} could not be saved, releasing its stock: ${err}`);
+      await this.releaseQuietly(orderId);
       throw err;
     }
 
@@ -114,9 +135,49 @@ export class OrdersService {
       orderId: order.id,
       userId: user.id,
       total,
-      itemsCount: reserved.reduce((n, i) => n + i.quantity, 0),
+      itemsCount: lines.reduce((n, l) => n + l.quantity, 0),
     });
+    for (const r of remaining.filter((r) => r.quantity <= LOW_STOCK_THRESHOLD)) {
+      this.events.emit<void, ProductLowStockEvent>(EVENTS.productLowStock, {
+        productId: r.productId,
+        name: byId.get(r.productId)?.name ?? r.productId,
+        stock: r.quantity,
+      });
+    }
     return toDto(order);
+  }
+
+  /** Reserves over gRPC and turns inventory failures into messages a customer understands. */
+  private async reserve(orderId: string, items: StockItem[], byId: Map<string, CatalogItem>) {
+    try {
+      return await this.inventory.reserve(orderId, items);
+    } catch (err) {
+      if (!(err instanceof InventoryException)) throw err;
+      if (err.getStatus() === HttpStatus.CONFLICT && err.productId) {
+        const name = byId.get(err.productId)?.name ?? 'a product';
+        throw new ConflictException(`Insufficient stock for "${name}" (only ${err.available ?? 0} left)`);
+      }
+      if (err.getStatus() >= 500) {
+        // We gave up waiting, but inventory may still have reserved. Releasing is
+        // idempotent and also blocks a late reservation with this id, so nothing leaks.
+        // It runs in the background: the customer gets the answer now, not after more waiting.
+        void this.releaseQuietly(orderId);
+      }
+      throw err;
+    }
+  }
+
+  /** Releases a reservation, retrying with backoff (1 s, 2 s, 4 s, 8 s) if inventory is unreachable. */
+  private async releaseQuietly(reservationId: string, attempt = 1): Promise<void> {
+    try {
+      await this.inventory.release(reservationId);
+    } catch (e) {
+      if (attempt >= 5) {
+        this.logger.error(`Stock of ${reservationId} not released after ${attempt} attempts: ${(e as Error).message}`);
+        return;
+      }
+      setTimeout(() => void this.releaseQuietly(reservationId, attempt + 1), 1000 * 2 ** (attempt - 1));
+    }
   }
 
   /** Customers only ever see their own orders; admins see all and can filter. */
@@ -189,7 +250,11 @@ export class OrdersService {
     };
   }
 
-  /** Loads an order and enforces ownership: a customer touching someone else's order gets 403. */
+
+
+
+  /**فحص ملكية الطلب 
+   *  Loads an order and enforces ownership: a customer touching someone else's order gets 403. */
   private async getAuthorized(user: AuthUser, id: string) {
     const order = await this.prisma.order.findUnique({ where: { id }, include: orderInclude });
     if (!order) throw new NotFoundException('Order not found');
@@ -211,9 +276,7 @@ export class OrdersService {
     await this.prisma.orderStatusHistory.create({ data: { orderId: order.id, status: to, changedBy, note } });
 
     if (to === OrderStatus.CANCELLED) {
-      await sendRpc(this.products, PATTERNS.products.releaseStock, {
-        items: order.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-      });
+      await this.releaseQuietly(order.id);
     }
     this.events.emit<void, OrderStatusChangedEvent>(EVENTS.orderStatusChanged, {
       orderId: order.id,
@@ -223,4 +286,11 @@ export class OrdersService {
     });
     return toDto((await this.prisma.order.findUnique({ where: { id: order.id }, include: orderInclude }))!);
   }
+}
+
+/** The same product twice in one order counts as one line. */
+function mergeItems(items: StockItem[]): StockItem[] {
+  const merged = new Map<string, number>();
+  for (const { productId, quantity } of items) merged.set(productId, (merged.get(productId) ?? 0) + quantity);
+  return [...merged].map(([productId, quantity]) => ({ productId, quantity }));
 }

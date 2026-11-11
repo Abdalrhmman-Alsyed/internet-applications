@@ -18,22 +18,28 @@
           ┌──────────┐ ┌──────────┐ ┌────────┐ ┌──────────────────────┐
           │  users   │ │ products │◄┤ orders │ │    notifications     │
           │  :3001   │ │  :3002   │ │ :3003  │ │ TCP :3005 · WS :3004 │
-          └────┬─────┘ └──┬────┬──┘ └───┬────┘ └──────────▲───────────┘
-               │          │    │        │                 │
-               │   events │    └─MinIO  │ events          │ consume
-               └──────────┴─────────────┴──► RabbitMQ ────┘
+          └────┬─────┘ └──┬────┬──┘ └─┬──┬───┘ └──────────▲───────────┘
+               │          │    │ gRPC │  │                │
+               │          │ gRPC   ▼  │  │                │
+               │          │  ┌──────────────────┐         │
+               │          │  │ inventory (Go)   │         │
+               │          │  │ gRPC :50051      │         │
+               │          │  │ inventory_db     │         │
+               │          │  └──────────────────┘         │
+               │   events └─MinIO       │ events          │ consume
+               └────────────────────────┴──► RabbitMQ ────┘
                                          (notifications_queue)
 
-         PostgreSQL: users_db · products_db · orders_db · notifications_db
+  PostgreSQL: users_db · products_db · orders_db · notifications_db · inventory_db
 ```
 
 ## مسار طلب شراء
 
 1. الزبون: `POST /api/v1/orders` مع التوكن.
 2. الـ Gateway: يتحقق من الـ JWT ← يتحقق إنه `CUSTOMER` ← يتحقق من الـ body (DTO) ← يبعت لـ orders-service.
-3. orders-service يطلب من products-service (TCP) **حجز المخزون**: transaction فيها `UPDATE ... WHERE stock >= qty`، فلو طلبين وصلوا بنفس اللحظة على آخر قطعة، واحد بس بينجح.
-4. products-service يرجّع **السعر والاسم من قاعدة البيانات** (السعر ما بيجي من العميل أبداً).
-5. orders-service يحفظ الطلب. إذا فشل الحفظ، بيرجّع المخزون (compensation).
+3. orders-service يطلب من products-service (TCP) **السعر والاسم من قاعدة البيانات** (السعر ما بيجي من العميل أبداً).
+4. orders-service يطلب من **inventory-service (Go) عبر gRPC** `ReserveStock` **بطلب واحد لكل العناصر**، مع مهلة (deadline) ثانيتين. الحجز transaction فيها `UPDATE ... WHERE quantity >= n` لكل عنصر: يا بينحجز الكل يا ولا شي، ولو طلبين وصلوا بنفس اللحظة على آخر قطعة، واحد بس بينجح.
+5. orders-service يحفظ الطلب (رقم الطلب هو نفسه رقم الحجز). إذا فشل الحفظ، بيستدعي `ReleaseStock` (compensation).
 6. orders-service ينشر حدث `order.created` على RabbitMQ ويرد فوراً للزبون.
 7. notifications-service يستقبل الحدث (بشكل غير متزامن)، يحفظ إشعار للزبون وإشعار للأدمن، ويبعتهم لحظياً عبر Socket.io.
 
@@ -44,6 +50,8 @@
 | **Microservices** (NestJS monorepo) | Modular monolith | المشروع بيطلب خدمات تعمل معاً وتواصل بينها ومعالجة غير متزامنة. كل باك بيملك خدماته بدون تعارض. الـ monorepo بيخلي الكود المشترك بمكتبة وحدة (`libs/common`). |
 | **API Gateway** | كشف كل خدمة | نقطة دخول وحدة للعملاء. المصادقة والـ rate limit والتحقق والـ Swagger بمكان واحد بدل ما تتكرر وتنسى بخدمة. |
 | **TCP** بين الـ Gateway والخدمات | HTTP داخلي | مدعوم مباشرة بـ NestJS، أسرع، وما في routes مكررة. |
+| **gRPC** لخدمة المخزون | TCP تبع Nest / REST | خدمة المخزون بلغة تانية (Go)، والـ TCP تبع Nest ما بيفهمه غير Nest. gRPC عقد مكتوب (`proto/inventory.proto`) بيتولّد منه كود للغتين، ثنائي وسريع فوق HTTP/2، وفيه deadlines ورموز أخطاء جاهزة. |
+| **Go** لخدمة المخزون (Polyglot) | NestJS / Python | أفضل دعم لـ gRPC، سريع، صورة Docker صغيرة (binary واحد بدون runtime)، والتزامن سهل. خدمة صغيرة ومحددة، مناسبة لتجربة لغة تانية. |
 | **RabbitMQ** للأحداث | Kafka / Redis Pub/Sub | Kafka تقيلة على أجهزتنا وأكبر من حاجتنا. Redis Pub/Sub بيضيّع الرسالة إذا المستهلك طافي. RabbitMQ بيحفظها (durable queue + manual ack) لحد ما تنعالج. |
 | **PostgreSQL** | MongoDB | بيانات علائقية (طلب ← عناصر ← منتجات) ومحتاجين transactions لحجز المخزون. |
 | **Database لكل خدمة** | قاعدة مشتركة | ما في خدمة بتلمس جداول غيرها؛ التواصل عبر الرسائل بس. على container واحد لتوفير الرام. |
@@ -68,7 +76,7 @@ backend/
 │   ├── products-service/    prisma/ + src/ (products, categories, storage=MinIO)
 │   ├── orders-service/      prisma/ + src/ (orders.service: ownership + transitions)
 │   └── notifications-service/ prisma/ + src/ (RMQ consumer + Socket.io gateway)
-├── libs/common/src/         patterns, events, types, RPC helpers, client configs
+├── libs/common/src/         patterns, events, types, RPC helpers, client configs, inventory.ts (gRPC client)
 ├── test/api.e2e-spec.ts     اختبارات الأمان على النظام الحقيقي
 └── Dockerfile               صورة وحدة لكل الخدمات (--build-arg APP=...)
 ```

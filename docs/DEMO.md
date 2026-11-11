@@ -78,7 +78,31 @@ cd backend && npm run seed
 
 `POST /auth/login` كـ Ahmad ← Authorize ← جرّب `PATCH /orders/{id}/status` ← **403**.
 
-## 4. أسئلة متوقعة
+## 4. المتطلب الثاني: خدمة المخزون (Go + gRPC)
+
+التفاصيل والأسئلة المتوقعة: [REQUIREMENT-2-GRPC.md](REQUIREMENT-2-GRPC.md).
+
+1. **ورجيه إنها خدمة لحالها بلغة تانية:** `docker compose ps` (فيه `inventory-service`)، وصفحة **System** باللوحة (inventory: gRPC 50051 · Go)، وافتح `proto/inventory.proto` (العقد) و `inventory-service/store.go` (الحجز).
+2. **عرض المنتج:** افتح منتج بالموبايل، الكمية جاية من خدمة المخزون (`GET /products/{id}` ← `stock`، `inventoryAvailable: true`).
+3. **الحجز وقت الطلب:** اعمل طلب. بلوغات Go بتشوف `ReserveStock`:
+   ```bash
+   docker compose logs -f inventory-service
+   ```
+4. **السباق على آخر قطعة (الأهم):**
+   ```bash
+   cd backend
+   npm run demo:race
+   ```
+   10 طلبات بنفس اللحظة على قطعة وحدة: **1 بينجح (201) و 9 بيترفضوا (409)** برسالة "Insufficient stock for …". السكربت بيرجّع كل شي متل ما كان.
+5. **خدمة المخزون متوقفة:**
+   ```bash
+   docker compose stop inventory-service
+   cd backend && npm run demo:order
+   ```
+   الرد **503** خلال ثانيتين: "Inventory service is unreachable"، مش انتظار للأبد. والمنتجات لسا بتنعرض، والموبايل بيكتب "معلومات المخزون غير متاحة حالياً". بعدها رجّعها: `docker compose up -d inventory-service`.
+6. **(اختياري) خدمة بطيئة:** بـ PowerShell `$env:INVENTORY_LATENCY_MS=3000; docker compose up -d inventory-service`، والطلب بيرجع **504** بعد ثانيتين بالضبط. ورجّعها: `Remove-Item Env:INVENTORY_LATENCY_MS; docker compose up -d inventory-service`.
+
+## 5. أسئلة متوقعة
 
 | السؤال | الجواب |
 |---|---|

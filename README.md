@@ -5,11 +5,13 @@
 | الجزء | التقنية | المجلد |
 |---|---|---|
 | الباك إند | NestJS (API Gateway + 4 خدمات) | [`backend/`](backend/) |
+| خدمة المخزون | Go + gRPC (قاعدة بيانات لحالها) | [`inventory-service/`](inventory-service/) · العقد [`proto/inventory.proto`](proto/inventory.proto) |
 | لوحة التحكم (أدمن) + معلومات النظام + مختبر الأمان | Next.js | [`web/`](web/) |
 | تطبيق الموبايل (متجر للزبون + وضع إدارة للأدمن) | Flutter | [`mobile/`](mobile/) |
 | التوثيق | Swagger + Postman + المعمارية | [`docs/`](docs/) |
 
 - 📖 **شرح المشروع للفريق (كيف بيشتغل كل جزء):** [docs/README.md](docs/README.md)
+- 🔌 **المتطلب الثاني (خدمة المخزون بـ Go و gRPC) مع الإثبات:** [docs/REQUIREMENT-2-GRPC.md](docs/REQUIREMENT-2-GRPC.md)
 - 🎤 **سيناريو العرض قدام المعيد خطوة بخطوة:** [docs/DEMO.md](docs/DEMO.md)
 - 📐 المعمارية وأسباب كل قرار: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - ✅ المتطلبات، وين تحققت، وكيف منثبتها: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)

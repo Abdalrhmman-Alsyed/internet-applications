@@ -17,9 +17,9 @@ PostgreSQL: users_db · products_db · orders_db · notifications_db       MinIO
 
 ---
 
-## الحاويات التسعة (ليش هالقد)
+## الحاويات العشرة (ليش هالقد)
 
-كل خدمة برنامج مستقل، فبتاخد container لحالها: **3 بنية تحتية + 5 باك + 1 ويب = 9**. تطبيق Flutter مش container لأنو بيشتغل على الموبايل.
+كل خدمة برنامج مستقل، فبتاخد container لحالها: **3 بنية تحتية + 5 باك (NestJS) + 1 مخزون (Go) + 1 ويب = 10**. تطبيق Flutter مش container لأنو بيشتغل على الموبايل.
 
 | الحاوية | البورت على جهازك | شغلتها |
 |---|---|---|
@@ -28,7 +28,8 @@ PostgreSQL: users_db · products_db · orders_db · notifications_db       MinIO
 | `minio` | `9000`، واجهة `9001` | تخزين الصور (متوافق مع S3) |
 | `api-gateway` | `3000` | الوحيد من الباك المفتوح للعالم، ومعه Swagger على `/docs` |
 | `users-service` | مخفي | التسجيل، الدخول، التوكنات، قفل الحساب |
-| `products-service` | مخفي | المنتجات، التصنيفات، الصور، المخزون |
+| `products-service` | مخفي | المنتجات، التصنيفات، الصور، الأسعار |
+| `inventory-service` | `50051` | **Go + gRPC**: المخزون (معرفة الكمية، الحجز، الإرجاع)، وقاعدته `inventory_db`. البورت مفتوح بس للتجربة بـ grpcurl |
 | `orders-service` | مخفي | الطلبات، الحالات، الملكية، الإحصائيات |
 | `notifications-service` | `3004` | الإشعارات. البورت مفتوح لأنو الـ WebSocket لازم العميل يوصله مباشرة |
 | `web` | `3001` | لوحة التحكم |
@@ -47,13 +48,15 @@ PostgreSQL: users_db · products_db · orders_db · notifications_db       MinIO
 
 1. الزبون بيبعت `POST /api/v1/orders` مع التوكن.
 2. الـ Gateway بيمرّره على: **rate limit**، بعدين **JWT**، بعدين **الدور لازم CUSTOMER**، بعدين **التحقق من الـ body** (DTO).
-3. orders-service بيطلب من products-service بـ TCP **يحجز المخزون**: `UPDATE … WHERE stock >= qty` جوا transaction، فما في بيع لآخر قطعة مرتين.
-4. products-service بيرجّع **السعر والاسم من الـ DB**. السعر ما بيجي من العميل أبداً.
-5. orders-service بيحفظ الطلب. إذا فشل الحفظ بيرجّع المخزون (compensation).
+3. orders-service بيطلب من products-service بـ TCP **السعر والاسم من الـ DB**. السعر ما بيجي من العميل أبداً.
+4. orders-service بيطلب من **inventory-service (Go) بـ gRPC** يحجز كل العناصر بطلب واحد، مع مهلة ثانيتين: `UPDATE … WHERE quantity >= n` جوا transaction، فيا بينحجز الكل يا ولا شي، وما في بيع لآخر قطعة مرتين.
+5. orders-service بيحفظ الطلب. إذا فشل الحفظ بيستدعي `ReleaseStock` (compensation).
 6. بينشر حدث `order.created` على RabbitMQ **وبيرد على الزبون فوراً**.
 7. notifications-service بيستقبل الحدث، بيحفظ إشعار للزبون وللأدمن، وبيبعتهم لحظياً بـ Socket.io.
 
-**القاعدة:** إذا بدك جواب (حجز مخزون) فاستعمل **TCP**. وإذا بس عم تخبّر (انعمل طلب) فاستعمل **حدث على RabbitMQ**.
+**القاعدة:** إذا بدك جواب (سعر، حجز مخزون) فاستعمل **طلب ورد** (TCP بين خدمات Nest، و gRPC مع خدمة Go). وإذا بس عم تخبّر (انعمل طلب) فاستعمل **حدث على RabbitMQ**.
+
+تفاصيل خدمة المخزون والإثبات: [REQUIREMENT-2-GRPC.md](REQUIREMENT-2-GRPC.md).
 
 ---
 

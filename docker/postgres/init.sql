@@ -3,3 +3,4 @@ CREATE DATABASE users_db;
 CREATE DATABASE products_db;
 CREATE DATABASE orders_db;
 CREATE DATABASE notifications_db;
+CREATE DATABASE inventory_db; -- inventory-service (Go) also creates it if missing

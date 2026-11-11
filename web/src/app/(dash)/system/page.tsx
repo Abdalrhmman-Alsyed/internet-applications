@@ -16,9 +16,10 @@ interface Endpoint {
 
 const SERVICE_INFO: Record<string, { port: string; db: string; owns: string }> = {
   users: { port: 'TCP 3001', db: 'users_db', owns: 'Accounts, login, JWT, lockout' },
-  products: { port: 'TCP 3002', db: 'products_db + MinIO', owns: 'Catalogue, images, stock reservation' },
+  products: { port: 'TCP 3002', db: 'products_db + MinIO', owns: 'Catalogue, prices, images' },
   orders: { port: 'TCP 3003', db: 'orders_db', owns: 'Orders, ownership checks, status flow' },
   notifications: { port: 'TCP 3005 · WS 3004', db: 'notifications_db', owns: 'RabbitMQ consumer, Socket.io pushes' },
+  inventory: { port: 'gRPC 50051 · Go', db: 'inventory_db', owns: 'Stock: check, reserve (all or nothing), release' },
 };
 
 const METHOD_TONE = { GET: 'green', POST: 'blue', PATCH: 'amber', DELETE: 'red', PUT: 'indigo' } as const;
@@ -188,6 +189,8 @@ function Architecture() {
         <Box title="orders" sub="orders_db" />
         <Box title="notifications" sub="notifications_db" />
       </div>
+      <p className="text-center text-slate-400">↓ gRPC with a deadline (products, orders → inventory)</p>
+      <Box title="inventory (Go)" sub="inventory_db · CheckStock · ReserveStock · ReleaseStock" tone="bg-teal-50" />
       <p className="text-center text-slate-400">users · products · orders → events → notifications</p>
       <div className="grid grid-cols-3 gap-3">
         <Box title="RabbitMQ" sub="durable queue, manual ack" tone="bg-amber-50" />

@@ -85,7 +85,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   children: [
                     Text(money(p.price), style: theme.textTheme.headlineSmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
                     const Spacer(),
-                    _StockLabel(p.stock),
+                    _StockLabel(p.stock, known: p.inventoryAvailable),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -115,7 +115,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           Navigator.pop(context);
                         },
                   icon: const Icon(Icons.add_shopping_cart),
-                  label: Text(p.stock == 0 ? context.tr('stock.out') : maxQty <= 0 ? context.tr('cart.allIn') : context.tr('cart.add')),
+                  label: Text(!p.inventoryAvailable
+                      ? context.tr('stock.unknown')
+                      : p.stock == 0
+                          ? context.tr('stock.out')
+                          : maxQty <= 0
+                              ? context.tr('cart.allIn')
+                              : context.tr('cart.add')),
                 ),
               ),
             ],
@@ -127,13 +133,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 }
 
 class _StockLabel extends StatelessWidget {
-  const _StockLabel(this.stock);
+  const _StockLabel(this.stock, {required this.known});
 
   final int stock;
+  final bool known;
 
   @override
   Widget build(BuildContext context) {
-    final (color, text) = stock == 0
+    final (color, text) = !known
+        ? (Colors.grey, context.tr('stock.unknown'))
+        : stock == 0
         ? (Colors.red, context.tr('stock.out'))
         : stock <= 5
             ? (Colors.orange, context.tr('stock.few', {'n': stock}))

@@ -110,6 +110,7 @@ const _en = <String, String>{
   'stock.out': 'Out of stock',
   'stock.few': 'Only {n} left',
   'stock.in': 'In stock ({n})',
+  'stock.unknown': 'Stock info unavailable',
   'cart.allIn': 'All in cart',
   'cart.add': 'Add to cart',
 
@@ -297,6 +298,7 @@ const _ar = <String, String>{
   'stock.out': 'نفد من المخزون',
   'stock.few': 'باقي {n} بس',
   'stock.in': 'متوفر ({n})',
+  'stock.unknown': 'معلومات المخزون غير متاحة حالياً',
   'cart.allIn': 'كلهم بالسلة',
   'cart.add': 'أضف للسلة',
 

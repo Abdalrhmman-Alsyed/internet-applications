@@ -1,0 +1,85 @@
+// Contract between the NestJS services and inventory-service (Go).
+// Both sides are generated from / loaded from this one file.
+syntax = "proto3";
+
+package inventory.v1;
+
+option go_package = "github.com/Abdalrhmman-Alsyed/internet-applications/inventory-service/gen/inventoryv1;inventoryv1";
+
+service InventoryService {
+  // ─── The three core operations ───
+
+  // How many units are available for each product.
+  rpc CheckStock(CheckStockRequest) returns (CheckStockResponse);
+
+  // Reserves every item of an order in one transaction: all or nothing.
+  // Fails with FAILED_PRECONDITION if any item lacks stock, NOT_FOUND if a product is unknown.
+  // Calling it again with the same reservation_id returns the existing reservation (idempotent).
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+
+  // Gives back everything held by a reservation. Safe to call twice, and safe to call for a
+  // reservation that never happened (after a timeout the caller cannot know which it was).
+  rpc ReleaseStock(ReleaseStockRequest) returns (ReleaseStockResponse);
+
+  // ─── Admin ───
+
+  // Sets the stock to an absolute value, or adjusts it by a delta (never below zero).
+  rpc SetStock(SetStockRequest) returns (StockLevel);
+
+  // Products whose stock is within a range (in-stock filter, low-stock view).
+  rpc ListStock(ListStockRequest) returns (CheckStockResponse);
+}
+
+message StockLevel {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message CheckStockRequest {
+  repeated string product_ids = 1;
+}
+
+message CheckStockResponse {
+  repeated StockLevel items = 1;
+}
+
+message ReserveItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message ReserveStockRequest {
+  // Chosen by the caller (orders-service uses the order id), so a retry or a
+  // release after a timeout refers to the same reservation.
+  string reservation_id = 1;
+  repeated ReserveItem items = 2;
+}
+
+message ReserveStockResponse {
+  string reservation_id = 1;
+  // Stock left after the reservation, per product (used for low-stock alerts).
+  repeated StockLevel remaining = 2;
+}
+
+message ReleaseStockRequest {
+  string reservation_id = 1;
+}
+
+message ReleaseStockResponse {
+  // false when there was nothing to release (already released, or never reserved).
+  bool released = 1;
+  repeated StockLevel restored = 2;
+}
+
+message SetStockRequest {
+  string product_id = 1;
+  oneof change {
+    int32 quantity = 2;
+    int32 delta = 3;
+  }
+}
+
+message ListStockRequest {
+  optional int32 min_quantity = 1;
+  optional int32 max_quantity = 2;
+}

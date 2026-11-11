@@ -1,4 +1,4 @@
-import { eventsBusClient } from '@app/common';
+import { eventsBusClient, InventoryClient } from '@app/common';
 import { Module } from '@nestjs/common';
 import { ClientsModule } from '@nestjs/microservices';
 import { CategoriesService } from './categories.service';
@@ -10,6 +10,6 @@ import { StorageService } from './storage.service';
 @Module({
   imports: [ClientsModule.register([eventsBusClient()])],
   controllers: [ProductsController],
-  providers: [PrismaService, StorageService, ProductsService, CategoriesService],
+  providers: [PrismaService, StorageService, ProductsService, CategoriesService, InventoryClient],
 })
 export class AppModule {}

@@ -67,6 +67,7 @@ class Product {
     required this.isActive,
     this.category,
     required this.images,
+    this.inventoryAvailable = true,
   });
 
   final String id;
@@ -75,6 +76,9 @@ class Product {
   final double price;
   final int stock;
   final bool isActive;
+
+  /// false when inventory-service could not be reached: [stock] is then unknown, not 0.
+  final bool inventoryAvailable;
   final Category? category;
   final List<String> images;
 
@@ -86,6 +90,7 @@ class Product {
         description: j['description'] ?? '',
         price: _d(j['price']),
         stock: j['stock'] as int,
+        inventoryAvailable: j['inventoryAvailable'] as bool? ?? true,
         isActive: j['isActive'] as bool? ?? true,
         category: j['category'] == null ? null : Category.fromJson(j['category']),
         images: (j['images'] as List? ?? []).map((i) => Env.fixUrl(i['url'] as String)).toList(),

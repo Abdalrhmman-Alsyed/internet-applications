@@ -1,3 +1,4 @@
+import { InventoryClient } from '@app/common';
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
@@ -32,6 +33,7 @@ import { UsersController } from './users/users.controller';
   ],
   providers: [
     HealthService,
+    InventoryClient,
     // Order matters: rate limit → authenticate → authorise.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

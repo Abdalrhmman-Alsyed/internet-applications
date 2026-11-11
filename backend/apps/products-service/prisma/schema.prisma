@@ -23,7 +23,7 @@ model Product {
   name        String
   description String         @default("")
   price       Decimal        @db.Decimal(10, 2)
-  stock       Int            @default(0)
+  // Stock is not here: it lives in inventory-service (Go, gRPC, inventory_db).
   /// Soft delete: past orders keep pointing at the product.
   isActive    Boolean        @default(true)
   categoryId  String?

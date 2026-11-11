@@ -11,9 +11,11 @@ x-backend-env: &backend-env
   PRODUCTS_HOST: products-service
   ORDERS_HOST: orders-service
   NOTIFICATIONS_HOST: notifications-service
+  INVENTORY_GRPC_URL: inventory-service:50051
+  INVENTORY_DEADLINE_MS: ${INVENTORY_DEADLINE_MS:-2000}
 
 services:
-  # ───────────── Infrastructure ─────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Infrastructure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   postgres:
     image: postgres:16-alpine
     environment:
@@ -63,10 +65,12 @@ services:
       timeout: 5s
       retries: 10
 
-  # ───────────── Backend services ─────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Backend services â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   api-gateway:
     build:
       context: ./backend
+      additional_contexts:
+        proto: ./proto
       args:
         APP: api-gateway
     environment:
@@ -84,11 +88,14 @@ services:
       - products-service
       - orders-service
       - notifications-service
+      - inventory-service
     restart: unless-stopped
 
   users-service:
     build:
       context: ./backend
+      additional_contexts:
+        proto: ./proto
       args:
         APP: users-service
     environment:
@@ -101,9 +108,33 @@ services:
       rabbitmq: { condition: service_healthy }
     restart: unless-stopped
 
+  # Go + gRPC, its own database (inventory_db). Owns product stock.
+  inventory-service:
+    build:
+      context: ./inventory-service
+      additional_contexts:
+        proto: ./proto
+    environment:
+      INVENTORY_DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@postgres:5432/inventory_db
+      GRPC_PORT: 50051
+      # Demo of a slow inventory: INVENTORY_LATENCY_MS=3000 docker compose up -d inventory-service
+      SIMULATE_LATENCY_MS: ${INVENTORY_LATENCY_MS:-0}
+    ports:
+      - "50051:50051" # gRPC (for grpcurl / demos)
+    healthcheck:
+      test: ["CMD", "/inventory-service", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
   products-service:
     build:
       context: ./backend
+      additional_contexts:
+        proto: ./proto
       args:
         APP: products-service
     environment:
@@ -125,11 +156,14 @@ services:
   orders-service:
     build:
       context: ./backend
+      additional_contexts:
+        proto: ./proto
       args:
         APP: orders-service
     environment:
       <<: *backend-env
       ORDERS_DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@postgres:5432/orders_db
+      LOW_STOCK_THRESHOLD: 5
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
@@ -138,6 +172,8 @@ services:
   notifications-service:
     build:
       context: ./backend
+      additional_contexts:
+        proto: ./proto
       args:
         APP: notifications-service
     environment:
@@ -152,7 +188,7 @@ services:
       rabbitmq: { condition: service_healthy }
     restart: unless-stopped
 
-  # ───────────── Frontend ─────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Frontend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   web:
     build:
       context: ./web

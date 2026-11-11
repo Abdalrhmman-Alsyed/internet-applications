@@ -16,6 +16,8 @@ FROM deps AS runtime
 ARG APP
 ENV APP=${APP} NODE_ENV=production
 COPY . .
+# gRPC contract with inventory-service (compose passes ../proto as the build context "proto")
+COPY --from=proto inventory.proto proto/inventory.proto
 RUN npx nest build ${APP} && sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 USER node
 ENTRYPOINT ["./docker-entrypoint.sh"]
