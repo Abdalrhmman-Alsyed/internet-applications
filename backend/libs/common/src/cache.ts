@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
+import { PERF_OPTIMIZED } from './perf';
 
 /** Must be longer than the replica can lag behind the primary (normally milliseconds). */
 const FRESH_WINDOW_SECONDS = Number(process.env.FRESH_WINDOW_SECONDS ?? 5);
@@ -31,6 +32,7 @@ export class CacheService implements OnModuleDestroy {
   }
 
   async getOrSet<T>(key: string, ttlSeconds: number, load: () => Promise<T>): Promise<T> {
+    if (!PERF_OPTIMIZED) return load(); // PERF_MODE=before: no cache, every read hits the database
     const cached = await this.get<T>(key);
     if (cached !== undefined) return cached;
 

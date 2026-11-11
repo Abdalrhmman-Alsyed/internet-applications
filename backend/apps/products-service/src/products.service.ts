@@ -1,4 +1,4 @@
-import { CacheService, EVENTS, EVENTS_BUS, InventoryClient, paginate, ProductLowStockEvent } from '@app/common';
+import { CacheService, EVENTS, EVENTS_BUS, InventoryClient, paginate, PERF_OPTIMIZED, ProductLowStockEvent } from '@app/common';
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { Prisma } from '@prisma-clients/products';
@@ -89,6 +89,7 @@ export class ProductsService {
 
   /** The read replica, except just after a catalogue change (then the primary). */
   private async reader() {
+    if (!PERF_OPTIMIZED) return this.prisma; // PERF_MODE=before: everything on the primary
     return (await this.cache.isFresh('catalog')) ? this.prisma : this.replica;
   }
 
@@ -257,12 +258,25 @@ export class ProductsService {
   /** Adds live stock with a single CheckStock call for the whole page (no N+1). */
   private async withStock(products: CatalogProduct[]) {
     try {
-      const stock = await this.inventory.checkStock(products.map((p) => p.id));
+      const stock = PERF_OPTIMIZED ? await this.inventory.checkStock(products.map((p) => p.id)) : await this.stockOneByOne(products);
       return products.map((p) => toDto(p, stock.get(p.id) ?? 0, true));
     } catch (err) {
       this.logger.warn(`Inventory unavailable, showing products without stock: ${(err as Error).message}`);
       return products.map((p) => toDto(p, 0, false));
     }
+  }
+
+  /**
+   * PERF_MODE=before: the N+1 version. One gRPC call per product, one after the other:
+   * a page of 20 products = 20 round trips to inventory-service instead of 1.
+   */
+  private async stockOneByOne(products: CatalogProduct[]) {
+    const stock = new Map<string, number>();
+    for (const p of products) {
+      const one = await this.inventory.checkStock([p.id]);
+      stock.set(p.id, one.get(p.id) ?? 0);
+    }
+    return stock;
   }
 
   private async assertCategory(categoryId?: string | null) {

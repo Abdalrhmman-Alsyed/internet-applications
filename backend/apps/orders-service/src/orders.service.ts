@@ -10,6 +10,7 @@ import {
   OrderStatusChangedEvent,
   paginate,
   PATTERNS,
+  PERF_OPTIMIZED,
   PRODUCTS_SERVICE,
   ProductLowStockEvent,
   Role,
@@ -192,6 +193,7 @@ export class OrdersService {
    * (placed, cancelled or changed an order): then the primary, so they see it.
    */
   private async reader(userId: string) {
+    if (!PERF_OPTIMIZED) return this.prisma; // PERF_MODE=before: everything on the primary
     return (await this.cache.isFresh(`user:${userId}`)) ? this.prisma : this.replica;
   }
 
@@ -241,6 +243,7 @@ export class OrdersService {
   }
 
   private async computeStats() {
+    if (!PERF_OPTIMIZED) return this.computeStatsBefore();
     // Right after any order write the replica may not have it yet: use the primary.
     const db = (await this.cache.isFresh('orders')) ? this.prisma : this.replica;
     const since = new Date();
@@ -286,7 +289,46 @@ export class OrdersService {
 
 
 
-  /**فحص ملكية الطلب 
+  /**
+   * PERF_MODE=before: the statistics exactly as they were before requirement 3.
+   * Two full scans of the table (count, then revenue) plus every order of the last
+   * 7 days pulled into Node and bucketed in JavaScript.
+   */
+  private async computeStatsBefore() {
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - 6);
+
+    const [grouped, revenue, recent] = await Promise.all([
+      this.prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.order.aggregate({ where: { status: { not: OrderStatus.CANCELLED } }, _sum: { total: true } }),
+      this.prisma.order.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true, total: true, status: true } }),
+    ]);
+
+    const byStatus = Object.fromEntries(Object.values(OrderStatus).map((s) => [s, 0])) as Record<OrderStatus, number>;
+    for (const g of grouped) byStatus[g.status as OrderStatus] = g._count._all;
+
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(since);
+      day.setDate(since.getDate() + i);
+      return { date: day.toISOString().slice(0, 10), orders: 0, revenue: 0 };
+    });
+    for (const o of recent) {
+      const bucket = last7Days.find((d) => d.date === o.createdAt.toISOString().slice(0, 10));
+      if (!bucket) continue;
+      bucket.orders += 1;
+      if (o.status !== OrderStatus.CANCELLED) bucket.revenue += o.total.toNumber();
+    }
+
+    return {
+      totalOrders: Object.values(byStatus).reduce((a, b) => a + b, 0),
+      revenue: revenue._sum.total?.toNumber() ?? 0,
+      byStatus,
+      last7Days,
+    };
+  }
+
+  /**فحص ملكية الطلب
    *  Loads an order and enforces ownership: a customer touching someone else's order gets 403. */
   private async getAuthorized(user: AuthUser, id: string, db: PrismaService | ReplicaPrismaService = this.prisma) {
     let order = await db.order.findUnique({ where: { id }, include: orderInclude });

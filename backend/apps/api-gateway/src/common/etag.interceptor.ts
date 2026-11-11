@@ -1,3 +1,4 @@
+import { PERF_OPTIMIZED } from '@app/common';
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Request, Response } from 'express';
@@ -17,6 +18,7 @@ import { map, Observable } from 'rxjs';
 @Injectable()
 export class ETagInterceptor implements NestInterceptor {
   intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
+    if (!PERF_OPTIMIZED) return next.handle(); // PERF_MODE=before: no ETag, always the full body
     const req = ctx.switchToHttp().getRequest<Request>();
     const res = ctx.switchToHttp().getResponse<Response>();
 

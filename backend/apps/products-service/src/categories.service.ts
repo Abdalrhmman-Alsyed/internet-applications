@@ -1,4 +1,4 @@
-import { CacheService } from '@app/common';
+import { CacheService, PERF_OPTIMIZED } from '@app/common';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { ReplicaPrismaService } from './replica-prisma.service';
@@ -21,7 +21,7 @@ export class CategoriesService {
   /** Cached with the catalogue (the product counts change when products do). */
   async findAll() {
     const key = `catalog:v${await this.cache.version('catalog')}:categories`;
-    const db = (await this.cache.isFresh('catalog')) ? this.prisma : this.replica;
+    const db = !PERF_OPTIMIZED || (await this.cache.isFresh('catalog')) ? this.prisma : this.replica;
     return this.cache.getOrSet(key, 300, () =>
       db.category.findMany({
         orderBy: { name: 'asc' },

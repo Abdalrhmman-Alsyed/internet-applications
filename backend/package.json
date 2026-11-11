@@ -17,7 +17,9 @@
     "perf:data": "node scripts/perf/bulk-data.mjs",
     "perf:test": "node scripts/perf/load-test.mjs",
     "perf:ryw": "node scripts/perf/read-your-writes.mjs",
-    "perf:compare": "node scripts/perf/compare.mjs"
+    "perf:compare": "node scripts/perf/compare.mjs",
+    "perf:mode": "node scripts/perf/mode.mjs",
+    "perf:explain": "node scripts/perf/explain.mjs"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.11.3",

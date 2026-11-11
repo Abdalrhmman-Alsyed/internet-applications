@@ -12,6 +12,8 @@ x-backend-env: &backend-env
   ORDERS_HOST: orders-service
   NOTIFICATIONS_HOST: notifications-service
   REDIS_URL: redis://redis:6379
+  # Requirement 3 demo: "before" turns the optimisations off (npm run perf:mode -- before|after)
+  PERF_MODE: ${PERF_MODE:-after}
   # Read-your-writes: after a write, that user's reads use the primary for this long.
   # Must be longer than the replica can lag (normally milliseconds).
   FRESH_WINDOW_SECONDS: ${FRESH_WINDOW_SECONDS:-5}

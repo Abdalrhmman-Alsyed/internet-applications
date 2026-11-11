@@ -26,7 +26,10 @@ const waitForGateway = async () => {
   throw new Error('gateway did not come back');
 };
 
-run(['compose', '-f', compose, 'up', '-d', 'api-gateway'], { RATE_LIMIT: '1000000' });
+// Keep whatever mode the system is in (npm run perf:mode) when the gateway restarts.
+const PERF_MODE = execFileSync('docker', ['compose', '-f', compose, 'exec', '-T', 'orders-service', 'printenv', 'PERF_MODE'], { encoding: 'utf8' }).trim() || 'after';
+console.log(`Load test "${label}" with PERF_MODE=${PERF_MODE}`);
+run(['compose', '-f', compose, 'up', '-d', 'api-gateway'], { RATE_LIMIT: '1000000', PERF_MODE });
 await waitForGateway();
 try {
   run([
@@ -39,5 +42,5 @@ try {
     'grafana/k6:0.54.0', 'run', '--quiet', '/scripts/load-test.js',
   ]);
 } finally {
-  run(['compose', '-f', compose, 'up', '-d', 'api-gateway']); // back to the normal limit
+  run(['compose', '-f', compose, 'up', '-d', 'api-gateway'], { PERF_MODE }); // back to the normal limit
 }
