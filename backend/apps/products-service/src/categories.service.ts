@@ -22,12 +22,13 @@ export class CategoriesService {
   async findAll() {
     const key = `catalog:v${await this.cache.version('catalog')}:categories`;
     const db = !PERF_OPTIMIZED || (await this.cache.isFresh('catalog')) ? this.prisma : this.replica;
-    return this.cache.getOrSet(key, 300, () =>
-      db.category.findMany({
+    const query = (client: PrismaService | ReplicaPrismaService) =>
+      client.category.findMany({
         orderBy: { name: 'asc' },
         include: { _count: { select: { products: { where: { isActive: true } } } } },
-      }),
-    );
+      });
+    // If the replica fails (restarting, down), the primary answers instead.
+    return this.cache.getOrSet(key, 300, () => query(db).catch((err) => (db === this.prisma ? Promise.reject(err) : query(this.prisma))));
   }
 
   async create(name: string) {

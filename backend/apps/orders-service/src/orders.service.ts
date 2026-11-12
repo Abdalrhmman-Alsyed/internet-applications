@@ -197,6 +197,17 @@ export class OrdersService {
     return (await this.cache.isFresh(`user:${userId}`)) ? this.prisma : this.replica;
   }
 
+  /** Runs a read on `db`; if that was the replica and it fails (restarting, down), the primary answers. */
+  private async withFallback<T>(db: PrismaService | ReplicaPrismaService, query: (client: PrismaService | ReplicaPrismaService) => Promise<T>) {
+    try {
+      return await query(db);
+    } catch (err) {
+      if (db === this.prisma) throw err;
+      this.logger.warn(`Replica read failed, using the primary: ${(err as Error).message.trim().split('\n').pop()}`);
+      return query(this.prisma);
+    }
+  }
+
   /** Customers only ever see their own orders; admins see all and can filter. */
   async findAll(user: AuthUser, q: FindOrdersQuery) {
     const page = q.page ?? 1;
@@ -205,11 +216,12 @@ export class OrdersService {
       status: q.status,
       userId: user.role === Role.ADMIN ? q.userId : user.id,
     };
-    const db = await this.reader(user.id);
-    const [items, total] = await db.$transaction([
-      db.order.findMany({ where, include: orderInclude, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
-      db.order.count({ where }),
-    ]);
+    const [items, total] = await this.withFallback(await this.reader(user.id), (db) =>
+      db.$transaction([
+        db.order.findMany({ where, include: orderInclude, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+        db.order.count({ where }),
+      ]),
+    );
     return paginate(items.map(toDto), total, page, limit);
   }
 
@@ -252,16 +264,18 @@ export class OrdersService {
 
     // Both aggregations run inside Postgres: 5 + 7 rows come back, not thousands of orders.
     // Count and revenue per status in ONE pass (was two scans of the whole table).
-    const [grouped, daily] = await Promise.all([
-      db.order.groupBy({ by: ['status'], _count: { _all: true }, _sum: { total: true } }),
-      // Uses the createdAt index instead of scanning every order.
-      db.$queryRaw<{ day: string; orders: number; revenue: number }[]>`
-        SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day,
-               count(*)::int AS orders,
-               coalesce(sum(total) FILTER (WHERE status <> 'CANCELLED'), 0)::float AS revenue
-        FROM orders WHERE "createdAt" >= ${since}
-        GROUP BY 1`,
-    ]);
+    const [grouped, daily] = await this.withFallback(db, (client) =>
+      Promise.all([
+        client.order.groupBy({ by: ['status'], _count: { _all: true }, _sum: { total: true } }),
+        // Uses the createdAt index instead of scanning every order.
+        client.$queryRaw<{ day: string; orders: number; revenue: number }[]>`
+          SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day,
+                 count(*)::int AS orders,
+                 coalesce(sum(total) FILTER (WHERE status <> 'CANCELLED'), 0)::float AS revenue
+          FROM orders WHERE "createdAt" >= ${since}
+          GROUP BY 1`,
+      ]),
+    );
 
     const byStatus = Object.fromEntries(Object.values(OrderStatus).map((s) => [s, 0])) as Record<OrderStatus, number>;
     let revenue = 0;
@@ -331,10 +345,12 @@ export class OrdersService {
   /**فحص ملكية الطلب
    *  Loads an order and enforces ownership: a customer touching someone else's order gets 403. */
   private async getAuthorized(user: AuthUser, id: string, db: PrismaService | ReplicaPrismaService = this.prisma) {
-    let order = await db.order.findUnique({ where: { id }, include: orderInclude });
-    // Not on the replica may just mean "not replicated yet" (e.g. an admin opening a
-    // brand-new order from its notification): ask the primary before saying 404.
-    if (!order && db !== this.prisma) order = await this.prisma.order.findUnique({ where: { id }, include: orderInclude });
+    const order = await this.withFallback(db, async (client) => {
+      const found = await client.order.findUnique({ where: { id }, include: orderInclude });
+      // Not on the replica may just mean "not replicated yet" (e.g. an admin opening a
+      // brand-new order from its notification): ask the primary before saying 404.
+      return found ?? (client !== this.prisma ? this.prisma.order.findUnique({ where: { id }, include: orderInclude }) : null);
+    });
     if (!order) throw new NotFoundException('Order not found');
     if (user.role !== Role.ADMIN && order.userId !== user.id) {
       this.logger.warn(`User ${user.id} tried to access order ${id} owned by ${order.userId}`);

@@ -43,4 +43,5 @@ try {
   ]);
 } finally {
   run(['compose', '-f', compose, 'up', '-d', 'api-gateway'], { PERF_MODE }); // back to the normal limit
+  await waitForGateway(); // so whatever runs next doesn't hit a gateway that is still starting
 }

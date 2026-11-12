@@ -93,6 +93,18 @@ export class ProductsService {
     return (await this.cache.isFresh('catalog')) ? this.prisma : this.replica;
   }
 
+  /** Runs a read on reader(); if the replica fails (restarting, down), the primary answers instead. */
+  private async read<T>(query: (db: PrismaService | ReplicaPrismaService) => Promise<T>): Promise<T> {
+    const db = await this.reader();
+    try {
+      return await query(db);
+    } catch (err) {
+      if (db === this.prisma) throw err;
+      this.logger.warn(`Replica read failed, using the primary: ${(err as Error).message.trim().split('\n').pop()}`);
+      return query(this.prisma);
+    }
+  }
+
   async findAll(q: FindProductsQuery) {
     const page = q.page ?? 1;
     const limit = q.limit ?? 20;
@@ -125,11 +137,12 @@ export class ProductsService {
       : { createdAt: 'desc' };
 
     const loadPage = async () => {
-      const db = await this.reader();
-      const [items, total] = await db.$transaction([
-        db.product.findMany({ where, orderBy, skip: (page - 1) * limit, take: limit, include: productInclude }),
-        db.product.count({ where }),
-      ]);
+      const [items, total] = await this.read((db) =>
+        db.$transaction([
+          db.product.findMany({ where, orderBy, skip: (page - 1) * limit, take: limit, include: productInclude }),
+          db.product.count({ where }),
+        ]),
+      );
       return { items: items.map(toCatalog), total };
     };
     // Admin views (hidden products) and stock filters depend on live data: not cached.
@@ -149,10 +162,11 @@ export class ProductsService {
   }
 
   private async findCatalogProduct(id: string): Promise<CatalogProduct | null> {
-    const db = await this.reader();
-    let product = await db.product.findUnique({ where: { id }, include: productInclude });
-    // A miss on the replica may only mean "not replicated yet": check the primary.
-    if (!product && db !== this.prisma) product = await this.prisma.product.findUnique({ where: { id }, include: productInclude });
+    const product = await this.read(async (db) => {
+      const found = await db.product.findUnique({ where: { id }, include: productInclude });
+      // A miss on the replica may only mean "not replicated yet": check the primary.
+      return found ?? (db !== this.prisma ? this.prisma.product.findUnique({ where: { id }, include: productInclude }) : null);
+    });
     return product && toCatalog(product);
   }
 

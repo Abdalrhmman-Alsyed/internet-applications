@@ -34,6 +34,9 @@ export class CacheService implements OnModuleDestroy {
   async getOrSet<T>(key: string, ttlSeconds: number, load: () => Promise<T>): Promise<T> {
     if (!PERF_OPTIMIZED) return load(); // PERF_MODE=before: no cache, every read hits the database
     const cached = await this.get<T>(key);
+    // Our own hit/miss counters: Redis's global keyspace stats also count the
+    // read-your-writes lookups, which would hide the real cache hit rate.
+    this.redis.incr(cached !== undefined ? 'stats:cache:hits' : 'stats:cache:misses').catch(() => undefined);
     if (cached !== undefined) return cached;
 
     const pending = this.inflight.get(key) as Promise<T> | undefined;
