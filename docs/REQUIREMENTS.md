@@ -18,7 +18,7 @@
 |---|---|---|
 | اللغة والإطار | NestJS 11 + TypeScript | — |
 | تقسيم الكود لأربع وحدات منفصلة | 4 خدمات مستقلة: `users`، `products`، `orders`، `notifications`، كل وحدة بقاعدة بياناتها | `docker compose ps` / `GET /health` |
-| يعمل كاملاً بـ Docker | `docker compose up -d --build` يشغّل 12 حاوية (منها inventory-service بـ Go، و Redis، ونسخة قراءة لـ Postgres) | تشغيل حي |
+| يعمل كاملاً بـ Docker | `docker compose up -d --build` يشغّل 14 حاوية (منها inventory-service بـ Go، و Redis، ونسخة قراءة لـ Postgres، و email-worker و Mailpit) | تشغيل حي |
 | REST للمنتجات (إضافة مع صورة، عرض، تصفية حسب التصنيف، تقسيم صفحات) | `GET /products?categoryId=&minPrice=&maxPrice=&search=&inStock=&sort=&page=&limit=` | اختبار `anyone can browse with filters and pagination` |
 | REST للطلبات (إنشاء، عرض، تغيير حالة) | `POST /orders`، `GET /orders(/:id)`، `PATCH /orders/:id/status` | Postman مجلد 3 |
 | إصدار في المسار | `/api/v1/...` | — |
@@ -53,3 +53,20 @@
 | تسجيل حساب مع `"role": "ADMIN"` | 400 |
 | WebSocket بتوكن غلط | قطع الاتصال |
 | ملف تنفيذي باسم `.png` | 400 |
+
+## المتطلب الرابع: Async Queues & Real-Time
+
+التفاصيل: [REQUIREMENT-4-ASYNC-REALTIME.md](REQUIREMENT-4-ASYNC-REALTIME.md). الإثبات كامل: `demo-4.cmd`.
+
+| البند | التنفيذ | الإثبات |
+|---|---|---|
+| نشر حدث عند إنشاء الطلب والرد بدون انتظار | `orders.service.ts` ← exchange `events`، routing key `order.created` | demo-4 خطوة 2: 201 خلال ~100 ms، الإيميل بعدها |
+| عامل منفصل يبعت إيميل حقيقي | حاوية `email-worker` (nodemailer)، الإعدادات من `.env` | Mailpit http://localhost:8025 + اختبار `the email worker sends the confirmation email` |
+| ack بعد الإرسال | `channel.ack(msg)` بعد `sendMail` | demo-4 خطوة 3: وقّفنا العامل، 3 رسائل استنوا، رجع وبعتهم |
+| إعادة محاولة | `email.retry` مع TTL لكل رسالة (5 ث / 30 ث / 2 د) | demo-4 خطوة 4: وقّفنا سيرفر البريد، المحاولة 2 نجحت |
+| DLQ | `x-dead-letter-exchange: email.dlx` ← `email.dead` | demo-4 خطوة 5: `email.dead` 0 ← 1 |
+| تتبّع الطلب لحظياً، وبس لصاحبه | صفحة `/track` + قناة `order:<id>` بفحص ملكية | اختبار `only the owner can follow an order channel` و `a status change reaches the owner live, and nobody else` |
+| لوحة أدمن لحظية، وبس للأدمن | قناة `admin.orders` | اختبار `only admins can subscribe to the admin channel` و `a new order reaches the admin channel instantly` |
+| تحقق قبل الاشتراك | `notifications.gateway.ts` ← `subscribe()` | demo-4 خطوة 6 (401 / 403 / 403) |
+| مكتبة جاهزة للـ WebSocket | Socket.io | — |
+

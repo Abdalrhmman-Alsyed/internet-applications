@@ -18,7 +18,7 @@ const SERVICE_INFO: Record<string, { port: string; db: string; owns: string }> =
   users: { port: 'TCP 3001', db: 'users_db', owns: 'Accounts, login, JWT, lockout' },
   products: { port: 'TCP 3002', db: 'products_db + MinIO', owns: 'Catalogue, prices, images' },
   orders: { port: 'TCP 3003', db: 'orders_db', owns: 'Orders, ownership checks, status flow' },
-  notifications: { port: 'TCP 3005 · WS 3004', db: 'notifications_db', owns: 'RabbitMQ consumer, Socket.io pushes' },
+  notifications: { port: 'TCP 3005 · WS 3004', db: 'notifications_db', owns: 'RabbitMQ consumer, Socket.io channels (checked)' },
   inventory: { port: 'gRPC 50051 · Go', db: 'inventory_db', owns: 'Stock: check, reserve (all or nothing), release' },
 };
 
@@ -89,16 +89,25 @@ export default function SystemPage() {
             </dl>
           </Card>
 
-          <Card title="Event queue (RabbitMQ)">
-            {d.queue ? (
-              <dl className="grid grid-cols-2 gap-y-2 text-sm">
-                <dt className="text-slate-500">Queue</dt><dd className="font-mono text-xs font-medium">{d.queue.name}</dd>
-                <dt className="text-slate-500">Durable</dt><dd className="font-medium">{d.queue.durable ? 'yes' : 'no'}</dd>
-                <dt className="text-slate-500">Consumers</dt><dd className="font-medium">{d.queue.consumers}</dd>
-                <dt className="text-slate-500">Published</dt><dd className="font-medium">{d.queue.published}</dd>
-                <dt className="text-slate-500">Acknowledged</dt><dd className="font-medium">{d.queue.acknowledged}</dd>
-                <dt className="text-slate-500">Waiting</dt><dd className="font-medium">{d.queue.pending}</dd>
-              </dl>
+          <Card title="Queues (RabbitMQ, exchange “events”)">
+            {d.queues?.length ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-500">
+                    <th className="pb-2">Queue</th><th className="pb-2">Consumers</th><th className="pb-2">Waiting</th><th className="pb-2">Acked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.queues.map((q) => (
+                    <tr key={q.name} className="border-t border-slate-100">
+                      <td className="py-1.5 font-mono text-xs">{q.name}</td>
+                      <td className="py-1.5">{q.consumers}</td>
+                      <td className={`py-1.5 font-medium ${q.pending > 0 && q.name.endsWith('.dead') ? 'text-rose-600' : ''}`}>{q.pending}</td>
+                      <td className="py-1.5">{q.acknowledged}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <p className="text-sm text-slate-500">Management API unreachable.</p>
             )}

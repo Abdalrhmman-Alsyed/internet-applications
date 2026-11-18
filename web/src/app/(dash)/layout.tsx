@@ -59,9 +59,12 @@ function CustomerBlocked() {
         <pre className="max-h-72 overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-rose-300">
           {res ? `HTTP ${res.status}\n${JSON.stringify(res.body, null, 2)}` : 'Requesting…'}
         </pre>
-        <Button variant="secondary" className="mt-4" onClick={logout}>
-          Sign out
-        </Button>
+        <div className="mt-4 flex gap-2">
+          <a href="/track" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Track my orders →</a>
+          <Button variant="secondary" onClick={logout}>
+            Sign out
+          </Button>
+        </div>
       </div>
     </main>
   );

@@ -1,5 +1,5 @@
 // Requirement 2 demo: inventory service in Go, over gRPC.   npm run demo:2
-import { ACCOUNTS, after, answer, api, before, bold, compose, confirm, dim, login, ok, run, say, show, step, table, title, waitHealthy, preflight } from './lib.mjs';
+import { ACCOUNTS, after, answer, api, before, bold, compose, confirm, dim, login, ok, run, say, show, step, table, title, waitHealthy, waitRunning, preflight } from './lib.mjs';
 import { execFileSync } from 'node:child_process';
 import { BACKEND } from './lib.mjs';
 
@@ -81,7 +81,8 @@ await run(
     if (await confirm('Also show a SLOW inventory (answers after 3 s, our deadline is 2 s)?')) {
       await step('inventory-service is SLOW (3 s per call) → 504 after exactly 2 s', 'The deadline also reaches Go: it stops working when the caller gives up (deadline propagation).');
       compose(['up', '-d', 'inventory-service'], { INVENTORY_LATENCY_MS: '3000' });
-      await waitHealthy('inventory-service');
+      say(dim('making inventory-service slow (3 s per call)...'));
+      await waitRunning('inventory-service'); // a slow service never reports "healthy" (its health check is slow too)
       const slow = await api('POST', '/orders', {
         token: ahmad.token,
         body: { items: [{ productId: product.id, quantity: 1 }], shippingAddress: 'Inventory slow demo' },

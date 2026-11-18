@@ -1,4 +1,4 @@
-import { NOTIFICATIONS_QUEUE, Role } from '@app/common';
+import { EMAIL_DLQ, EMAIL_QUEUE, EMAIL_RETRY_QUEUE, NOTIFICATIONS_DLQ, NOTIFICATIONS_QUEUE, Role } from '@app/common';
 import { Controller, Get, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiForbiddenResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -39,7 +39,11 @@ export class SystemController {
   @ApiOperation({ summary: '[Admin] Runtime info: services, security config, message queue stats' })
   @ApiForbiddenResponse({ description: 'Not an admin' })
   async info() {
-    const [services, queue] = await Promise.all([this.health.check(), this.queueStats()]);
+    const [services, queues] = await Promise.all([
+      this.health.check(),
+      Promise.all([NOTIFICATIONS_QUEUE, EMAIL_QUEUE, EMAIL_RETRY_QUEUE, EMAIL_DLQ, NOTIFICATIONS_DLQ].map((q) => this.queueStats(q))),
+    ]);
+    const queue = queues[0];
     const mem = process.memoryUsage();
     return {
       gateway: {
@@ -62,15 +66,17 @@ export class SystemController {
         roles: Object.values(Role),
       },
       queue,
+      // Requirement 4: every queue bound to the "events" exchange, plus retry and dead-letter queues
+      queues: queues.filter(Boolean),
     };
   }
 
-  /** Live stats of the events queue from the RabbitMQ management API (null if unreachable). */
-  private async queueStats() {
+  /** Live stats of one queue from the RabbitMQ management API (null if unreachable). */
+  private async queueStats(name: string) {
     const base = process.env.RABBITMQ_MANAGEMENT_URL ?? 'http://localhost:15672';
     const auth = Buffer.from(`${process.env.RABBITMQ_USER ?? 'app'}:${process.env.RABBITMQ_PASSWORD ?? 'app_password'}`).toString('base64');
     try {
-      const res = await fetch(`${base}/api/queues/%2F/${NOTIFICATIONS_QUEUE}`, {
+      const res = await fetch(`${base}/api/queues/%2F/${encodeURIComponent(name)}`, {
         headers: { Authorization: `Basic ${auth}` },
         signal: AbortSignal.timeout(2000),
       });
@@ -82,7 +88,7 @@ export class SystemController {
         message_stats?: { publish?: number; ack?: number; publish_details?: { rate?: number } };
       };
       return {
-        name: NOTIFICATIONS_QUEUE,
+        name,
         durable: q.durable ?? false,
         consumers: q.consumers ?? 0,
         pending: q.messages ?? 0,

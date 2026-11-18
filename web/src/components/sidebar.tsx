@@ -15,6 +15,7 @@ const NAV = [
   { href: '/notifications', label: 'Notifications', icon: '🔔' },
   { href: '/system', label: 'System', icon: '🖥️' },
   { href: '/security', label: 'Security lab', icon: '🛡️' },
+  { href: '/track', label: 'Order tracking', icon: '📍' },
 ];
 
 export function Sidebar() {

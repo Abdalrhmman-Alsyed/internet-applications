@@ -339,6 +339,85 @@ describe('E-commerce API (e2e)', () => {
     });
   });
 
+  describe('Requirement 4: queues and real-time channels', () => {
+    const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8025';
+    const sockets: Socket[] = [];
+    const connect = (token: string) =>
+      new Promise<Socket>((resolve) => {
+        const s = io(WS, { auth: { token }, transports: ['websocket'], reconnection: false });
+        sockets.push(s);
+        s.on('connect', () => resolve(s));
+      });
+    const subscribe = (s: Socket, payload: object) => new Promise<any>((resolve) => s.emit('subscribe', payload, resolve));
+    let r4OrderId: string;
+    let adminSocket: Socket;
+    let aliceSocket: Socket;
+    let bobSocket: Socket;
+
+    beforeAll(async () => {
+      [adminSocket, aliceSocket, bobSocket] = await Promise.all([connect(adminToken), connect(alice.token), connect(bob.token)]);
+    });
+    afterAll(() => sockets.forEach((s) => s.disconnect()));
+
+    it('only admins can subscribe to the admin channel', async () => {
+      expect(await subscribe(adminSocket, { channel: 'admin.orders' })).toEqual({ ok: true, channel: 'admin.orders' });
+      expect(await subscribe(aliceSocket, { channel: 'admin.orders' })).toEqual(expect.objectContaining({ ok: false, status: 403 }));
+    });
+
+    it('a new order reaches the admin channel instantly, and the API answers without waiting for the email', async () => {
+      const pushed = new Promise<any>((resolve) => adminSocket.on('order.created', resolve));
+      const started = Date.now();
+      const res = await api('POST', '/orders', {
+        token: alice.token,
+        body: { items: [{ productId, quantity: 1 }], shippingAddress: 'Realtime street 4' },
+      });
+      expect(res.status).toBe(201);
+      r4OrderId = res.body.id;
+      const event = await pushed;
+      expect(event).toEqual(expect.objectContaining({ orderId: r4OrderId, userId: alice.id, status: 'PENDING' }));
+      expect(Date.now() - started).toBeLessThan(3000);
+    });
+
+    it('only the owner can follow an order channel', async () => {
+      expect(await subscribe(aliceSocket, { channel: 'order', orderId: r4OrderId })).toEqual({ ok: true, channel: `order:${r4OrderId}` });
+      expect(await subscribe(bobSocket, { channel: 'order', orderId: r4OrderId })).toEqual(expect.objectContaining({ ok: false, status: 403 }));
+      expect(await subscribe(bobSocket, { channel: 'order', orderId: 'not-a-uuid' })).toEqual(expect.objectContaining({ ok: false, status: 400 }));
+      expect(await subscribe(bobSocket, { channel: 'nope' })).toEqual(expect.objectContaining({ ok: false, status: 400 }));
+    });
+
+    it('a status change reaches the owner live, and nobody else', async () => {
+      let bobGot = false;
+      bobSocket.on('order.status', () => (bobGot = true));
+      const pushed = new Promise<any>((resolve) => aliceSocket.on('order.status', (e) => e.orderId === r4OrderId && resolve(e)));
+      expect((await api('PATCH', `/orders/${r4OrderId}/status`, { token: adminToken, body: { status: 'CONFIRMED' } })).status).toBe(200);
+      expect(await pushed).toEqual(expect.objectContaining({ orderId: r4OrderId, from: 'PENDING', to: 'CONFIRMED' }));
+      await new Promise((r) => setTimeout(r, 500));
+      expect(bobGot).toBe(false);
+    });
+
+    it('the email worker sends the confirmation email (local inbox: Mailpit)', async () => {
+      const ref = `#${r4OrderId.slice(0, 8)}`;
+      let mail: any;
+      for (let i = 0; i < 40 && !mail; i++) {
+        const list = await fetch(`${MAILPIT}/api/v1/messages?limit=200`).then((r) => r.json());
+        mail = list.messages?.find((m: any) => m.Subject?.includes(ref));
+        if (!mail) await new Promise((r) => setTimeout(r, 500));
+      }
+      expect(mail).toBeDefined();
+      expect(mail.To[0].Address).toBe(`alice.${run}@test.local`);
+    }, 30000);
+
+    it('every queue exists, is durable and has its consumer; dead-letter queues are empty of this run', async () => {
+      const info = await api('GET', '/system/info', { token: adminToken });
+      const byName = Object.fromEntries(info.body.queues.map((q: any) => [q.name, q]));
+      expect(byName['email.order-created']).toEqual(expect.objectContaining({ durable: true, consumers: 1 }));
+      expect(byName['notifications.events']).toEqual(expect.objectContaining({ durable: true, consumers: 1 }));
+      expect(byName['email.retry']).toBeDefined();
+      expect(byName['email.dead']).toBeDefined();
+      expect(byName['notifications.dead']).toBeDefined();
+    });
+  });
+
   describe('Notifications', () => {
     it("customer sees own notifications but cannot mark another user's as read", async () => {
       const mine = await api('GET', '/notifications', { token: alice.token });

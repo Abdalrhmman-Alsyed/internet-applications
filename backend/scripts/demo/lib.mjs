@@ -132,6 +132,23 @@ export async function waitHealthy(service, seconds = 90) {
   return false;
 }
 
+/**
+ * Waits until the container is running (not "healthy"): a deliberately slow service
+ * also answers its own health check too late, so it would never become healthy.
+ */
+export async function waitRunning(service, seconds = 60) {
+  for (let i = 0; i < seconds; i++) {
+    try {
+      if (compose(['ps', service, '--format', '{{.State}}']) === 'running') {
+        await sleep(2500); // let the gRPC server start listening
+        return true;
+      }
+    } catch {}
+    await sleep(1000);
+  }
+  return false;
+}
+
 export async function waitApi(seconds = 60) {
   for (let i = 0; i < seconds; i++) {
     try {

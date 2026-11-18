@@ -23,16 +23,16 @@ export default function OverviewPage() {
   const customers = useApi<Paginated<User>>('/users?role=CUSTOMER&limit=1');
   const lowStock = useApi<Paginated<Product>>('/products?maxStock=5&sort=name&limit=8');
   const recent = useApi<Paginated<Order>>('/orders?limit=6');
-  const { unreadBump } = useRealtime();
+  const { unreadBump, orderBump } = useRealtime();
 
-  // New orders arrive as live notifications: refresh the figures.
+  // New orders and status changes arrive live on the admin channel: refresh the figures.
   useEffect(() => {
-    if (unreadBump === 0) return;
+    if (unreadBump === 0 && orderBump === 0) return;
     stats.reload();
     recent.reload();
     lowStock.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadBump]);
+  }, [unreadBump, orderBump]);
 
   if (stats.error) return <ErrorBox error={stats.error} />;
   if (!stats.data) return <Loading />;

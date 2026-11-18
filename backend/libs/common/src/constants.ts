@@ -6,7 +6,21 @@ export const NOTIFICATIONS_SERVICE = 'NOTIFICATIONS_SERVICE';
 /** RabbitMQ publisher for domain events consumed by notifications-service. */
 export const EVENTS_BUS = 'EVENTS_BUS';
 
-export const NOTIFICATIONS_QUEUE = 'notifications_queue';
+/**
+ * Requirement 4: events go to a topic EXCHANGE, and every consumer has its own queue
+ * bound to it (fan-out). One event reaches notifications AND the email worker, and a
+ * slow or stopped consumer never affects the other.
+ */
+export const EVENTS_EXCHANGE = 'events';
+export const NOTIFICATIONS_QUEUE = 'notifications.events';
+/** Messages notifications-service could not process (dead-lettered, kept for inspection). */
+export const NOTIFICATIONS_DLQ = 'notifications.dead';
+/** The email worker: main queue, delayed-retry queue, dead-letter exchange and queue. */
+export const EMAIL_QUEUE = 'email.order-created';
+export const EMAIL_RETRY_QUEUE = 'email.retry';
+export const EMAIL_DLX = 'email.dlx';
+export const EMAIL_DLQ = 'email.dead';
+export const NOTIFICATIONS_DLX = 'notifications.dlx';
 
 /** Default internal TCP ports (overridable with <NAME>_PORT env vars). */
 export const DEFAULT_PORTS = {

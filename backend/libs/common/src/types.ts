@@ -46,6 +46,11 @@ export interface OrderCreatedEvent {
   userId: string;
   total: number;
   itemsCount: number;
+  /** Everything the email worker needs, so it never has to call another service. */
+  customerEmail: string;
+  shippingAddress: string;
+  items: { name: string; quantity: number; unitPrice: number }[];
+  createdAt: string;
 }
 
 export interface OrderStatusChangedEvent {

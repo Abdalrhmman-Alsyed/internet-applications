@@ -13,7 +13,7 @@ export default function OrdersPage() {
   const [status, setStatus] = useState<OrderStatus | ''>('');
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
-  const { unreadBump } = useRealtime();
+  const { unreadBump, orderBump, adminChannel, newOrders } = useRealtime();
 
   const params = new URLSearchParams({ page: String(page), limit: '15' });
   if (status) params.set('status', status);
@@ -22,13 +22,32 @@ export default function OrdersPage() {
   const names = useMemo(() => new Map(users.data?.data.map((u) => [u.id, u]) ?? []), [users.data]);
 
   useEffect(() => {
-    if (unreadBump) list.reload();
+    // Requirement 4: a new order or a status change on the admin channel refreshes the list instantly
+    if (unreadBump || orderBump) list.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadBump]);
+  }, [unreadBump, orderBump]);
 
   return (
     <>
-      <PageHeader title="Orders" subtitle="Admins see every order and move it through its lifecycle" />
+      <PageHeader
+        title="Orders"
+        subtitle="Admins see every order and move it through its lifecycle"
+        action={
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${adminChannel === 'subscribed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+            {adminChannel === 'subscribed' ? '● Live: admin.orders' : adminChannel === 'refused' ? 'Live channel refused' : 'Connecting…'}
+          </span>
+        }
+      />
+      {newOrders.length > 0 && (
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <b>New orders received live:</b>{' '}
+          {newOrders.slice(0, 5).map((o) => (
+            <span key={o.orderId} className="mr-3 inline-block">
+              {shortId(o.orderId)} · {o.customerEmail} · {money(o.total)} · <span className="text-emerald-700">{dateTime(o.createdAt)}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <Card>
         <div className="mb-4 flex flex-wrap gap-2">
           {(['', ...ORDER_STATUSES] as const).map((s) => (

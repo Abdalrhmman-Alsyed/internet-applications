@@ -20,7 +20,8 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (user) router.replace('/');
+    // Admins go to the dashboard, customers to their live order tracking page (requirement 4)
+    if (user) router.replace(user.role === 'ADMIN' ? '/' : '/track');
   }, [user, router]);
 
   async function submit(e: React.FormEvent) {
@@ -28,8 +29,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await login(email, password);
-      router.replace('/');
+      await login(email, password); // the effect above redirects
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0));
     } finally {

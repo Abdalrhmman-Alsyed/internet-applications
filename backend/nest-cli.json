@@ -53,6 +53,13 @@
       "sourceRoot": "apps/notifications-service/src",
       "compilerOptions": { "tsConfigPath": "apps/notifications-service/tsconfig.app.json" }
     },
+    "email-worker": {
+      "type": "application",
+      "root": "apps/email-worker",
+      "entryFile": "apps/email-worker/src/main",
+      "sourceRoot": "apps/email-worker/src",
+      "compilerOptions": { "tsConfigPath": "apps/email-worker/tsconfig.app.json" }
+    },
     "common": {
       "type": "library",
       "root": "libs/common",

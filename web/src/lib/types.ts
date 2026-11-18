@@ -119,13 +119,17 @@ export interface SystemInfo {
     passwordHashing: string;
     roles: Role[];
   };
-  queue: {
-    name: string;
-    durable: boolean;
-    consumers: number;
-    pending: number;
-    published: number;
-    acknowledged: number;
-    publishRatePerSec: number;
-  } | null;
+  queue: QueueStats | null;
+  /** Requirement 4: every queue (events, email, retry, dead-letter) */
+  queues?: QueueStats[];
+}
+
+export interface QueueStats {
+  name: string;
+  durable: boolean;
+  consumers: number;
+  pending: number;
+  published: number;
+  acknowledged: number;
+  publishRatePerSec: number;
 }

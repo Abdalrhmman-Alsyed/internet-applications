@@ -28,7 +28,9 @@
                │          │  └──────────────────┘         │
                │   events └─MinIO       │ events          │ consume
                └────────────────────────┴──► RabbitMQ ────┘
-                                         (notifications_queue)
+                              exchange "events" (topic) ─► notifications.events
+                                                        └─► email.order-created ─► email-worker ─► SMTP
+                                                            (retry: email.retry · DLQ: email.dead)
 
   PostgreSQL: users_db · products_db · orders_db · notifications_db · inventory_db
 ```
@@ -40,8 +42,9 @@
 3. orders-service يطلب من products-service (TCP) **السعر والاسم من قاعدة البيانات** (السعر ما بيجي من العميل أبداً).
 4. orders-service يطلب من **inventory-service (Go) عبر gRPC** `ReserveStock` **بطلب واحد لكل العناصر**، مع مهلة (deadline) ثانيتين. الحجز transaction فيها `UPDATE ... WHERE quantity >= n` لكل عنصر: يا بينحجز الكل يا ولا شي، ولو طلبين وصلوا بنفس اللحظة على آخر قطعة، واحد بس بينجح.
 5. orders-service يحفظ الطلب (رقم الطلب هو نفسه رقم الحجز). إذا فشل الحفظ، بيستدعي `ReleaseStock` (compensation).
-6. orders-service ينشر حدث `order.created` على RabbitMQ ويرد فوراً للزبون.
-7. notifications-service يستقبل الحدث (بشكل غير متزامن)، يحفظ إشعار للزبون وإشعار للأدمن، ويبعتهم لحظياً عبر Socket.io.
+6. orders-service ينشر حدث `order.created` على exchange `events` ويرد فوراً للزبون.
+7. email-worker ياخد نسخة ويبعت إيميل التأكيد (ack بعد الإرسال، retry، DLQ).
+8. notifications-service ياخد نسخة تانية، يحفظ الإشعارات، ويبعت الطلب لحظياً لقناة `admin.orders`. تغييرات الحالة بتروح لقناة `order:<id>` (صاحب الطلب بس). التفاصيل: [REQUIREMENT-4-ASYNC-REALTIME.md](REQUIREMENT-4-ASYNC-REALTIME.md)
 
 ## القرارات وأسبابها
 

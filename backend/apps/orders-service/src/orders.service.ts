@@ -139,11 +139,17 @@ export class OrdersService {
 
     // Read-your-writes: this customer's next reads come from the primary for a few seconds.
     await Promise.all([this.cache.del(STATS_KEY), this.cache.markFresh(`user:${user.id}`), this.cache.markFresh('orders')]);
+    // Requirement 4: publish and answer at once. Notifications and the confirmation email
+    // happen in the background, each consumer on its own queue; the customer waits for neither.
     this.events.emit<void, OrderCreatedEvent>(EVENTS.orderCreated, {
       orderId: order.id,
       userId: user.id,
       total,
       itemsCount: lines.reduce((n, l) => n + l.quantity, 0),
+      customerEmail: user.email,
+      shippingAddress: order.shippingAddress,
+      items: lines.map((l) => ({ name: l.name, quantity: l.quantity, unitPrice: l.unitPrice })),
+      createdAt: order.createdAt.toISOString(),
     });
     for (const r of remaining.filter((r) => r.quantity <= LOW_STOCK_THRESHOLD)) {
       this.events.emit<void, ProductLowStockEvent>(EVENTS.productLowStock, {

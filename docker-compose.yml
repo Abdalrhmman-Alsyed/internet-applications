@@ -44,6 +44,11 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
+    # Fixed node name + volume: durable queues and persistent messages survive a restart
+    # or re-creation of the container (requirement 4: no message is lost).
+    hostname: rabbitmq
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-app}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-app_password}
@@ -78,6 +83,19 @@ services:
       retries: 30
     depends_on:
       postgres: { condition: service_healthy }
+
+  # Requirement 4: local test mailbox (SMTP :1025, inbox UI http://localhost:8025).
+  # Used unless SMTP_HOST in .env points at an external provider (Mailtrap, Gmail…).
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "8025:8025" # inbox (web UI + API)
+      - "1025:1025" # SMTP
+    environment:
+      MP_DATABASE: /data/mailpit.db # keep the inbox across restarts
+    volumes:
+      - mailpit_data:/data
+    restart: unless-stopped
 
   # Cache only (no persistence): if it is emptied or down, the app reads the database.
   redis:
@@ -222,6 +240,33 @@ services:
       rabbitmq: { condition: service_healthy }
     restart: unless-stopped
 
+  # Requirement 4: background worker that sends the order confirmation email.
+  # SMTP settings come from .env (never from code); default is the local Mailpit inbox.
+  email-worker:
+    build:
+      context: ./backend
+      additional_contexts:
+        proto: ./proto
+      args:
+        APP: email-worker
+    environment:
+      <<: *backend-env
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      MAIL_FROM: ${MAIL_FROM:-E-Commerce Shop <orders@shop.local>}
+      EMAIL_MAX_ATTEMPTS: ${EMAIL_MAX_ATTEMPTS:-4}
+      EMAIL_RETRY_DELAYS_MS: ${EMAIL_RETRY_DELAYS_MS:-5000,30000,120000}
+      # Demo of the dead-letter queue: SIMULATE_EMAIL_FAILURE=always (every send fails)
+      SIMULATE_EMAIL_FAILURE: ${SIMULATE_EMAIL_FAILURE:-never}
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mailpit: { condition: service_started }
+    restart: unless-stopped
+
   notifications-service:
     build:
       context: ./backend
@@ -258,5 +303,7 @@ services:
 
 volumes:
   postgres_data:
+  rabbitmq_data:
+  mailpit_data:
   postgres_replica_data:
   minio_data:

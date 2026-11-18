@@ -9,6 +9,7 @@ import {
 } from '@app/common';
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, MessagePattern, Payload, RmqContext } from '@nestjs/microservices';
+import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsService } from './notifications.service';
 
 const STATUS_TEXT: Record<string, string> = {
@@ -22,7 +23,10 @@ const STATUS_TEXT: Record<string, string> = {
 export class NotificationsController {
   private readonly logger = new Logger(NotificationsController.name);
 
-  constructor(private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly notifications: NotificationsService,
+    private readonly gateway: NotificationsGateway,
+  ) {}
 
   // ─── Requests from the gateway (TCP) ───
   @MessagePattern(PATTERNS.health)
@@ -60,6 +64,16 @@ export class NotificationsController {
   @EventPattern(EVENTS.orderCreated)
   onOrderCreated(@Payload() e: OrderCreatedEvent, @Ctx() ctx: RmqContext) {
     return this.handle(ctx, async () => {
+      // Requirement 4: the new order appears at once on every admin dashboard.
+      this.gateway.emitNewOrder({
+        orderId: e.orderId,
+        userId: e.userId,
+        customerEmail: e.customerEmail,
+        total: e.total,
+        itemsCount: e.itemsCount,
+        status: 'PENDING',
+        createdAt: e.createdAt,
+      });
       await this.notifications.notifyUser(e.userId, {
         type: EVENTS.orderCreated,
         title: 'Order received',
@@ -77,14 +91,16 @@ export class NotificationsController {
 
   @EventPattern(EVENTS.orderStatusChanged)
   onOrderStatusChanged(@Payload() e: OrderStatusChangedEvent, @Ctx() ctx: RmqContext) {
-    return this.handle(ctx, () =>
-      this.notifications.notifyUser(e.userId, {
+    return this.handle(ctx, async () => {
+      // Requirement 4: the tracking page of THIS order (its owner) and the admin channel update live.
+      this.gateway.emitOrderStatus(e.orderId, { orderId: e.orderId, from: e.from, to: e.to, at: new Date().toISOString() });
+      await this.notifications.notifyUser(e.userId, {
         type: EVENTS.orderStatusChanged,
         title: 'Order update',
         body: `Your order #${e.orderId.slice(0, 8)} ${STATUS_TEXT[e.to] ?? `is now ${e.to}`}.`,
         data: { orderId: e.orderId, from: e.from, to: e.to },
-      }),
-    );
+      });
+    });
   }
 
   @EventPattern(EVENTS.productLowStock)
@@ -108,7 +124,7 @@ export class NotificationsController {
       channel.ack(message);
     } catch (err) {
       this.logger.error(`Failed to process ${ctx.getPattern()}: ${err}`);
-      channel.nack(message, false, false);
+      channel.nack(message, false, false); // → notifications.dlx → notifications.dead (kept, not lost)
     }
   }
 }

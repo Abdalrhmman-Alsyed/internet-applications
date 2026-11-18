@@ -17,23 +17,25 @@ PostgreSQL: users_db · products_db · orders_db · notifications_db       MinIO
 
 ---
 
-## الحاويات الـ 12 (ليش هالقد)
+## الحاويات الـ 14 (ليش هالقد)
 
-كل خدمة برنامج مستقل، فبتاخد container لحالها: **5 بنية تحتية (Postgres، نسخة القراءة، Redis، RabbitMQ، MinIO) + 5 باك (NestJS) + 1 مخزون (Go) + 1 ويب = 12**. تطبيق Flutter مش container لأنو بيشتغل على الموبايل.
+كل خدمة برنامج مستقل، فبتاخد container لحالها: **6 بنية تحتية (Postgres، نسخة القراءة، Redis، RabbitMQ، MinIO، Mailpit) + 6 باك (NestJS، منهم email-worker) + 1 مخزون (Go) + 1 ويب = 14**. تطبيق Flutter مش container لأنو بيشتغل على الموبايل.
 
 | الحاوية | البورت على جهازك | شغلتها |
 |---|---|---|
 | `postgres` | `5433` | 4 قواعد منفصلة بنفس الـ container (لتوفير الرام). 5433 لحتى ما يتعارض مع Postgres منزّل عندكم |
 | `postgres-replica` | `5440` | **نسخة قراءة** من Postgres (streaming replication). القراءة منها، والكتابة على الأساسية |
 | `redis` | `6379` | **كاش** للكتالوج والإحصائيات، وعلامات read-your-writes. بدون حفظ على القرص |
-| `rabbitmq` | `5672`، واجهة `15672` | طابور الأحداث |
+| `rabbitmq` | `5672`، واجهة `15672` | الأحداث: exchange `events` وطابور لكل مستهلك، مع retry و DLQ |
+| `mailpit` | SMTP `1025`، صندوق `8025` | سيرفر بريد تجريبي (المتطلب 4). بيتبدّل بـ Mailtrap/Gmail من `.env` |
+| `email-worker` | مخفي | **المتطلب 4**: بياخد `order.created` ويبعت إيميل التأكيد. ack بعد الإرسال، إعادة محاولة، DLQ |
 | `minio` | `9000`، واجهة `9001` | تخزين الصور (متوافق مع S3) |
 | `api-gateway` | `3000` | الوحيد من الباك المفتوح للعالم، ومعه Swagger على `/docs` |
 | `users-service` | مخفي | التسجيل، الدخول، التوكنات، قفل الحساب |
 | `products-service` | مخفي | المنتجات، التصنيفات، الصور، الأسعار |
 | `inventory-service` | `50051` | **Go + gRPC**: المخزون (معرفة الكمية، الحجز، الإرجاع)، وقاعدته `inventory_db`. البورت مفتوح بس للتجربة بـ grpcurl |
 | `orders-service` | مخفي | الطلبات، الحالات، الملكية، الإحصائيات |
-| `notifications-service` | `3004` | الإشعارات. البورت مفتوح لأنو الـ WebSocket لازم العميل يوصله مباشرة |
+| `notifications-service` | `3004` | الإشعارات + **قنوات Socket.io** (`admin.orders` للأدمن، `order:<id>` لصاحب الطلب). البورت مفتوح لأنو الـ WebSocket لازم العميل يوصله مباشرة |
 | `web` | `3001` | لوحة التحكم |
 
 أشياء بالـ compose لازم تعرفوها:
@@ -53,8 +55,9 @@ PostgreSQL: users_db · products_db · orders_db · notifications_db       MinIO
 3. orders-service بيطلب من products-service بـ TCP **السعر والاسم من الـ DB**. السعر ما بيجي من العميل أبداً.
 4. orders-service بيطلب من **inventory-service (Go) بـ gRPC** يحجز كل العناصر بطلب واحد، مع مهلة ثانيتين: `UPDATE … WHERE quantity >= n` جوا transaction، فيا بينحجز الكل يا ولا شي، وما في بيع لآخر قطعة مرتين.
 5. orders-service بيحفظ الطلب. إذا فشل الحفظ بيستدعي `ReleaseStock` (compensation).
-6. بينشر حدث `order.created` على RabbitMQ **وبيرد على الزبون فوراً**.
-7. notifications-service بيستقبل الحدث، بيحفظ إشعار للزبون وللأدمن، وبيبعتهم لحظياً بـ Socket.io.
+6. بينشر حدث `order.created` على exchange اسمه `events` بـ RabbitMQ **وبيرد على الزبون فوراً**.
+7. **email-worker** بياخد نسخة ويبعت إيميل التأكيد (ack بعد الإرسال بس، وإعادة محاولة، و DLQ للي بيفشل دايماً).
+8. notifications-service بياخد نسخة تانية: بيحفظ إشعار، وبيبعت الطلب لحظياً لقناة الأدمن `admin.orders`. وأي تغيير حالة بيروح لقناة `order:<id>` يلي بس صاحب الطلب بيقدر يشترك فيها.
 
 **القاعدة:** إذا بدك جواب (سعر، حجز مخزون) فاستعمل **طلب ورد** (TCP بين خدمات Nest، و gRPC مع خدمة Go). وإذا بس عم تخبّر (انعمل طلب) فاستعمل **حدث على RabbitMQ**.
 
