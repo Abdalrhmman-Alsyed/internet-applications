@@ -69,7 +69,9 @@ async function main() {
     if (msg) void handle(channel, msg);
   });
 
+  let stopping = false;
   const shutdown = async () => {
+    stopping = true;
     log.log('Stopping: unacknowledged messages go back to the queue');
     await channel.close().catch(() => undefined);
     await connection.close().catch(() => undefined);
@@ -79,6 +81,7 @@ async function main() {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
   connection.on('close', () => {
+    if (stopping) return; // a normal stop, not a lost connection
     log.error('RabbitMQ connection closed, exiting (Docker restarts the worker)');
     process.exit(1);
   });

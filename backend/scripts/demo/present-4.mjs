@@ -9,9 +9,11 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { ACCOUNTS, api, bold, compose, cyan, dim, green, login, red, sleep, waitApi, yellow } from './lib.mjs';
+import { ACCOUNTS, api, BACKEND, bold, compose, cyan, dim, green, login, red, sleep, waitApi, yellow } from './lib.mjs';
 
 const WEB = 'http://localhost:3001';
+const CONTROL = 'http://localhost:3999/';
+const controlUp = () => fetch(`${CONTROL}api/state`, { signal: AbortSignal.timeout(3000) }).then((r) => r.ok).catch(() => false);
 const API_URL = 'http://localhost:3000/api/v1';
 const EDGE = [
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -164,11 +166,17 @@ async function main() {
   } catch {}
   const half = Math.floor(W / 2);
 
+  // Demo control page (scenes 6, 7, 8): a small local server, started in the background
+  if (!(await controlUp())) {
+    spawn(process.execPath, [join(BACKEND, 'scripts', 'demo', 'control-4.mjs')], { cwd: BACKEND, detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    for (let i = 0; i < 40 && !(await controlUp()); i++) await sleep(250);
+  }
+
   // Left: admin
-  const admin = await openWindow('admin', 9301, 0, half, H, [`${WEB}/login`, 'http://localhost:8025/', 'http://localhost:15672/']);
+  const admin = await openWindow('admin', 9301, 0, half, H, [`${WEB}/login`, 'http://localhost:8025/', 'http://localhost:15672/', CONTROL]);
   await signIn(admin, ACCOUNTS.admin, '/orders');
   // Extra tabs: inbox and queues (RabbitMQ signed in too)
-  const [, mail, rabbit] = admin.tabs;
+  const [, mail, rabbit, control] = admin.tabs;
   const rs = await cdpSession(rabbit.webSocketDebuggerUrl);
   for (let i = 0; i < 40; i++) {
     await sleep(250);
@@ -201,7 +209,7 @@ async function main() {
   // A fresh profile can open its own welcome tabs (extensions, first run): close every tab
   // that is not ours and bring the main page of each window to the front.
   await sleep(2000);
-  const keep = new Set([admin.target.id, mail?.id, rabbit?.id, ahmad.target.id]);
+  const keep = new Set([admin.target.id, mail?.id, rabbit?.id, control?.id, ahmad.target.id]);
   for (const [port, main] of [[9301, admin.target.id], [9302, ahmad.target.id]]) {
     for (const t of (await cdpTargets(port)).filter((x) => x.type === 'page')) {
       if (!keep.has(t.id)) await fetch(`http://127.0.0.1:${port}/json/close/${t.id}`).catch(() => undefined);
@@ -211,7 +219,7 @@ async function main() {
 
   console.log('');
   say(`${adminLive ? green('✔') : red('✖')} LEFT  window: admin on Orders${adminLive ? ', channel "admin.orders" live' : ' (press F5 if the badge is not green)'}`);
-  say(dim('               tabs: Mailpit (emails) · RabbitMQ (queues, signed in as app)'));
+  say(dim('               tabs: Mailpit (emails) · RabbitMQ (queues, signed in as app) · Demo control (scenes 6–8)'));
   say(`${ahmadLive ? green('✔') : red('✖')} RIGHT window: Ahmad on "My orders"${ahmadLive ? ', his order channel live' : ' (press F5 if the badge is not green)'}`);
   console.log('');
   say(bold('Sara\'s order for the 403 scene (paste it in "Try to follow someone else\'s order"):'));
