@@ -16,6 +16,7 @@
     "demo:2": "node scripts/demo/demo-2.mjs",
     "demo:3": "node scripts/demo/demo-3.mjs",
     "demo:4": "node scripts/demo/demo-4.mjs",
+    "present:4": "node scripts/demo/present-4.mjs",
     "demo:race": "node scripts/demo-inventory.mjs race",
     "demo:order": "node scripts/demo-inventory.mjs order",
     "perf:data": "node scripts/perf/bulk-data.mjs",

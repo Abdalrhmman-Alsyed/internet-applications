@@ -144,7 +144,7 @@ cd backend && npm run seed
 التفاصيل والأسئلة المتوقعة: [REQUIREMENT-4-ASYNC-REALTIME.md](REQUIREMENT-4-ASYNC-REALTIME.md).
 
 1. **السكربت:** دبل كليك على `demo-4.cmd` (أو `cd backend && npm run demo:4`). بيمشي خطوة خطوة: الطوابير، الرد الفوري، توقيف العامل، توقيف سيرفر البريد، الـ DLQ، القنوات والرفض. وبيرجّع كل شي طبيعي بالآخر (حتى لو ضغطت Ctrl+C).
-2. **بمتصفحين:** عادي = أدمن على Orders، خفي = أحمد على `/track`. أحمد بيعمل طلب ← بيطلع عند الأدمن فوراً. الأدمن بيأكّد ← بيتغير عند أحمد بدون refresh.
+2. **بمتصفحين:** دبل كليك على `present-4.cmd` بيفتحهن جنب بعض ومسجّلين دخول. عادي = أدمن على Orders، خفي = أحمد على `/track`. أحمد بيعمل طلب ← بيطلع عند الأدمن فوراً. الأدمن بيأكّد ← بيتغير عند أحمد بدون refresh.
 3. **الإيميلات:** http://localhost:8025. **الطوابير:** http://localhost:15672 أو صفحة System.
 4. **توقيف العامل يدوياً:** `docker compose stop email-worker`، اعمل طلبين، شوف الطابور `email.order-created` بـ RabbitMQ، بعدين `docker compose start email-worker` والإيميلات بتوصل.
 
