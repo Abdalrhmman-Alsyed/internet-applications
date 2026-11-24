@@ -3,6 +3,7 @@ import { declareEmailTopology, EMAIL_QUEUE, EMAIL_RETRY_QUEUE, OrderCreatedEvent
 import { Logger } from '@nestjs/common';
 import * as amqp from 'amqplib';
 import Redis from 'ioredis';
+import { randomUUID } from 'node:crypto';
 import { Mailer } from './mailer';
 
 /**
@@ -16,7 +17,7 @@ import { Mailer } from './mailer';
  *    last attempt the message is rejected and RabbitMQ moves it to the dead-letter queue
  *    (email.dead), so one bad message never blocks the others.
  *  - Delivery is "at least once", so the worker is idempotent: an order whose email was
- *    already sent is skipped (marker in Redis).
+ *    already sent is skipped. An atomic Redis lease prevents simultaneous sends.
  */
 const log = new Logger('EmailWorker');
 const MAX_ATTEMPTS = Number(process.env.EMAIL_MAX_ATTEMPTS ?? 4); // first try + 3 retries
@@ -25,22 +26,36 @@ const RETRY_DELAYS_MS = (process.env.EMAIL_RETRY_DELAYS_MS ?? '5000,30000,120000
 const SIMULATE_FAILURE = process.env.SIMULATE_EMAIL_FAILURE ?? 'never';
 
 const mailer = new Mailer();
-const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: 1, enableOfflineQueue: false });
-redis.on('error', () => undefined); // Redis is only used for duplicate detection; never fatal
+const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+  maxRetriesPerRequest: 1,
+  enableOfflineQueue: false,
+  commandTimeout: 2000,
+});
+redis.on('error', (err) => log.warn(`Redis: ${err.message}`));
 
 const sentKey = (orderId: string) => `email:sent:order:${orderId}`;
+const leaseKey = (orderId: string) => `email:lease:order:${orderId}`;
+const LEASE_MS = 120_000;
+const SENT_SECONDS = 7 * 24 * 3600;
 
-async function alreadySent(orderId: string) {
-  try {
-    return (await redis.exists(sentKey(orderId))) === 1;
-  } catch {
-    return false;
-  }
+async function claim(orderId: string, token: string) {
+  return redis.eval(`
+    if redis.call('EXISTS', KEYS[1]) == 1 then return 'sent' end
+    if redis.call('SET', KEYS[2], ARGV[1], 'NX', 'PX', ARGV[2]) then return 'claimed' end
+    return 'busy'
+  `, 2, sentKey(orderId), leaseKey(orderId), token, LEASE_MS);
 }
 
-async function markSent(orderId: string) {
-  await redis.set(sentKey(orderId), '1', 'EX', 7 * 24 * 3600).catch(() => undefined);
-}
+const RELEASE = `
+  if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+  return 0
+`;
+const COMPLETE = `
+  if redis.call('GET', KEYS[2]) ~= ARGV[1] then return 0 end
+  redis.call('SET', KEYS[1], '1', 'EX', ARGV[2])
+  redis.call('DEL', KEYS[2])
+  return 1
+`;
 
 async function connect(): Promise<amqp.Connection> {
   for (let attempt = 1; ; attempt++) {
@@ -66,7 +81,7 @@ async function main() {
   log.log(`Waiting for order.created on "${EMAIL_QUEUE}" (max ${MAX_ATTEMPTS} attempts, retry after ${RETRY_DELAYS_MS.join('/')} ms, failure simulation: ${SIMULATE_FAILURE})`);
 
   await channel.consume(EMAIL_QUEUE, (msg: amqp.ConsumeMessage | null) => {
-    if (msg) void handle(channel, msg);
+    if (msg) void handle(channel, msg).catch((err) => log.error(err));
   });
 
   let stopping = false;
@@ -102,19 +117,28 @@ async function handle(channel: amqp.ConfirmChannel, msg: amqp.ConsumeMessage) {
     return;
   }
   const ref = `#${event.orderId.slice(0, 8)}`;
+  const token = randomUUID();
+  let ownsLease = false;
 
   try {
-    if (await alreadySent(event.orderId)) {
+    const result = await claim(event.orderId, token);
+    if (result === 'sent') {
       log.warn(`${ref}: email already sent earlier, skipping the duplicate delivery`);
       channel.ack(msg);
       return;
     }
+    if (result === 'busy') {
+      await scheduleRetry(channel, msg, attempt, 1500, 'Another worker has the email lease');
+      return;
+    }
+    ownsLease = true;
     if (SIMULATE_FAILURE === 'always') throw new Error('Simulated SMTP failure (SIMULATE_EMAIL_FAILURE=always)');
 
     const messageId = await mailer.sendOrderConfirmation(event);
-    await markSent(event.orderId);
+    const marked = await redis.eval(COMPLETE, 2, sentKey(event.orderId), leaseKey(event.orderId), token, SENT_SECONDS);
+    if (marked !== 1) throw new Error('Email lease expired before recording delivery');
     channel.ack(msg); // only now is the message removed from the queue
-    log.log(`${ref}: confirmation sent to ${event.customerEmail} (attempt ${attempt}, ${messageId})`);
+    log.log(`${ref}: confirmation sent (attempt ${attempt}, ${messageId})`);
   } catch (err) {
     const reason = (err as Error).message;
     if (attempt >= MAX_ATTEMPTS) {
@@ -125,21 +149,29 @@ async function handle(channel: amqp.ConfirmChannel, msg: amqp.ConsumeMessage) {
     }
     const delay = RETRY_DELAYS_MS[Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1)];
     log.warn(`${ref}: attempt ${attempt}/${MAX_ATTEMPTS} failed (${reason}). Retrying in ${delay} ms`);
-    try {
-      // Park a copy in the retry queue; it expires after `delay` and RabbitMQ routes it
-      // back to the main queue. Acknowledge the original only once the copy is stored.
+    await scheduleRetry(channel, msg, attempt + 1, delay, reason);
+  } finally {
+    if (ownsLease) {
+      await redis.eval(RELEASE, 1, leaseKey(event.orderId), token).catch((err: Error) => log.warn(err.message));
+    }
+  }
+}
+
+async function scheduleRetry(channel: amqp.ConfirmChannel, msg: amqp.ConsumeMessage, attempt: number, delay: number, reason: string) {
+  try {
+    await new Promise<void>((resolve, reject) => {
       channel.sendToQueue(EMAIL_RETRY_QUEUE, msg.content, {
         persistent: true,
         expiration: String(delay),
         contentType: msg.properties.contentType,
-        headers: { ...msg.properties.headers, 'x-attempt': attempt + 1, 'x-last-error': reason.slice(0, 200) },
-      });
-      await channel.waitForConfirms();
-      channel.ack(msg);
-    } catch (publishErr) {
-      log.error(`${ref}: could not schedule the retry (${(publishErr as Error).message}), returning it to the queue`);
-      channel.nack(msg, false, true);
-    }
+        messageId: msg.properties.messageId,
+        headers: { ...msg.properties.headers, 'x-attempt': attempt, 'x-last-error': reason.slice(0, 200) },
+      }, (err) => (err ? reject(err) : resolve()));
+    });
+    channel.ack(msg);
+  } catch (err) {
+    log.error(`Could not schedule the retry: ${(err as Error).message}`);
+    channel.nack(msg, false, true);
   }
 }
 

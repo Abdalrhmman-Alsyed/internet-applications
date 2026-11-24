@@ -3,6 +3,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { hostname } from 'node:os';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -13,8 +14,12 @@ async function bootstrap() {
   // "no-store" (orders, users, tokens must never sit in a shared cache) unless a route
   // uses ETagInterceptor (the public catalogue).
   app.getHttpAdapter().getInstance().set('etag', false);
+  // HAProxy is the only trusted hop and replaces this header at the public entry.
+  if (process.env.TRUST_PROXY === '1') app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  const instance = hostname();
   app.use((_req: unknown, res: { setHeader(name: string, value: string): void }, next: () => void) => {
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Served-By', instance);
     next();
   });
   app.enableCors({

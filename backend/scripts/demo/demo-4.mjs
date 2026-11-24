@@ -7,7 +7,7 @@ const RABBIT = process.env.RABBITMQ_URL ?? 'amqp://app:app_password@localhost:56
 const MGMT = process.env.RABBITMQ_MANAGEMENT_URL ?? 'http://localhost:15672';
 const MGMT_AUTH = 'Basic ' + Buffer.from('app:app_password').toString('base64');
 const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8025';
-const WS = process.env.WS_URL ?? 'http://localhost:3004';
+const WS = process.env.WS_URL ?? new URL(process.env.API_URL ?? 'http://localhost:3000').origin;
 const QUEUES = ['notifications.events', 'email.order-created', 'email.retry', 'email.dead', 'notifications.dead'];
 
 let admin, ahmad, sara, product;

@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import * as amqp from 'amqplib';
 import { AppModule } from './app.module';
+import { RedisIoAdapter } from './redis-io.adapter';
 
 /** The dead-letter exchange/queue must exist before our queue starts pointing at it. */
 async function declareTopology() {
@@ -31,9 +32,15 @@ async function bootstrap() {
   await declareTopology();
   const app = await NestFactory.create(AppModule);
   app.useGlobalFilters(new AllRpcExceptionsFilter());
+  if (process.env.SOCKET_REDIS_ADAPTER === 'true') {
+    const adapter = new RedisIoAdapter(app, process.env.REDIS_URL ?? 'redis://localhost:6379');
+    await adapter.connect();
+    app.useWebSocketAdapter(adapter);
+  }
   app.connectMicroservice(tcpServerOptions('notifications'), { inheritAppConfig: true });
   app.connectMicroservice(eventsConsumerOptions(), { inheritAppConfig: true });
   app.enableShutdownHooks();
+  await app.init();
   await app.startAllMicroservices();
 
   const wsPort = Number(process.env.WS_PORT ?? 3004);

@@ -17,6 +17,12 @@ export class HealthController {
   constructor(private readonly health: HealthService) {}
 
   @Public()
+  @Get('live')
+  liveness() {
+    return { status: 'ok' };
+  }
+
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Status of the gateway and every service' })
   async check(@Res({ passthrough: true }) res: Response) {

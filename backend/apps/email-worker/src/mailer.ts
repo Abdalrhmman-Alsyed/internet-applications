@@ -38,6 +38,7 @@ export class Mailer {
     const info = await this.transport.sendMail({
       from: this.from,
       to: e.customerEmail,
+      messageId: `<order-${e.orderId}@shop.local>`,
       subject: `Order #${ref} received — $${e.total.toFixed(2)}`,
       text:
         `Thank you for your order #${ref}.\n\n` +

@@ -30,7 +30,7 @@ flutter run
 - **موبايل حقيقي على نفس الشبكة:**
 
 ```bash
-flutter run --dart-define=API_URL=http://192.168.1.10:3000 --dart-define=WS_URL=http://192.168.1.10:3004
+flutter run --dart-define=API_URL=http://192.168.1.10:3000
 ```
 
 ## البنية

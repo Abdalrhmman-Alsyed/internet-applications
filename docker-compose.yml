@@ -10,7 +10,7 @@ x-backend-env: &backend-env
   USERS_HOST: users-service
   PRODUCTS_HOST: products-service
   ORDERS_HOST: orders-service
-  NOTIFICATIONS_HOST: notifications-service
+  NOTIFICATIONS_HOST: load-balancer
   REDIS_URL: redis://redis:6379
   # Requirement 3 demo: "before" turns the optimisations off (npm run perf:mode -- before|after)
   PERF_MODE: ${PERF_MODE:-after}
@@ -87,20 +87,23 @@ services:
   # Requirement 4: local test mailbox (SMTP :1025, inbox UI http://localhost:8025).
   # Used unless SMTP_HOST in .env points at an external provider (Mailtrap, Gmail…).
   mailpit:
-    image: axllent/mailpit:v1.21
+    image: axllent/mailpit:v1.30
     ports:
       - "8025:8025" # inbox (web UI + API)
       - "1025:1025" # SMTP
     environment:
       MP_DATABASE: /data/mailpit.db # keep the inbox across restarts
+      MP_IGNORE_DUPLICATE_IDS: "true"
     volumes:
       - mailpit_data:/data
     restart: unless-stopped
 
-  # Cache only (no persistence): if it is emptied or down, the app reads the database.
+  # Shared cache and coordination. Keep rate limits and email receipts across restarts.
   redis:
     image: redis:7.4-alpine
-    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis_data:/data
     ports:
       - "6379:6379"
     healthcheck:
@@ -129,6 +132,7 @@ services:
 
   # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Backend services â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   api-gateway:
+    scale: 3
     build:
       context: ./backend
       additional_contexts:
@@ -138,6 +142,7 @@ services:
     environment:
       <<: *backend-env
       PORT: 3000
+      TRUST_PROXY: "1"
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001}
       # Per IP per minute. A load test sends everything from one IP, so it raises this
       # (npm run perf:test does it for you, then puts it back).
@@ -146,14 +151,22 @@ services:
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       RABBITMQ_USER: ${RABBITMQ_USER:-app}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-app_password}
+    depends_on:
+      users-service: { condition: service_started }
+      products-service: { condition: service_started }
+      orders-service: { condition: service_started }
+      notifications-service: { condition: service_started }
+      inventory-service: { condition: service_started }
+      load-balancer: { condition: service_started }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  load-balancer:
+    image: haproxy:3.0-alpine
+    volumes:
+      - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "3000:3000"
-    depends_on:
-      - users-service
-      - products-service
-      - orders-service
-      - notifications-service
-      - inventory-service
     restart: unless-stopped
 
   users-service:
@@ -243,6 +256,7 @@ services:
   # Requirement 4: background worker that sends the order confirmation email.
   # SMTP settings come from .env (never from code); default is the local Mailpit inbox.
   email-worker:
+    scale: 3
     build:
       context: ./backend
       additional_contexts:
@@ -268,6 +282,7 @@ services:
     restart: unless-stopped
 
   notifications-service:
+    scale: 3
     build:
       context: ./backend
       additional_contexts:
@@ -278,12 +293,12 @@ services:
       <<: *backend-env
       NOTIFICATIONS_DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@postgres:5432/notifications_db
       WS_PORT: 3004
+      SOCKET_REDIS_ADAPTER: "true"
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001}
-    ports:
-      - "3004:3004" # WebSocket (Socket.io)
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      redis: { condition: service_healthy }
     restart: unless-stopped
 
   # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Frontend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -292,13 +307,14 @@ services:
       context: ./web
       args:
         NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3000}
-        NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL:-http://localhost:3004}
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL:-${PUBLIC_API_URL:-http://localhost:3000}}
     environment:
-      API_INTERNAL_URL: http://api-gateway:3000
+      API_INTERNAL_URL: http://load-balancer:3000
     ports:
       - "3001:3001"
     depends_on:
       - api-gateway
+      - load-balancer
     restart: unless-stopped
 
 volumes:
@@ -307,3 +323,4 @@ volumes:
   mailpit_data:
   postgres_replica_data:
   minio_data:
+  redis_data:

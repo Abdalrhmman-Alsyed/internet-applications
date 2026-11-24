@@ -8,7 +8,7 @@
 import { io, Socket } from 'socket.io-client';
 
 const API = process.env.API_URL ?? 'http://localhost:3000/api/v1';
-const WS = process.env.WS_URL ?? 'http://localhost:3004';
+const WS = process.env.WS_URL ?? new URL(API).origin;
 const ADMIN = { email: process.env.ADMIN_EMAIL ?? 'admin@shop.local', password: process.env.ADMIN_PASSWORD ?? 'Admin@12345' };
 const PASSWORD = 'Customer@123';
 const run = Date.now();
@@ -407,11 +407,11 @@ describe('E-commerce API (e2e)', () => {
       expect(mail.To[0].Address).toBe(`alice.${run}@test.local`);
     }, 30000);
 
-    it('every queue exists, is durable and has its consumer; dead-letter queues are empty of this run', async () => {
+    it('consumer queues are durable and each has three replicas', async () => {
       const info = await api('GET', '/system/info', { token: adminToken });
       const byName = Object.fromEntries(info.body.queues.map((q: any) => [q.name, q]));
-      expect(byName['email.order-created']).toEqual(expect.objectContaining({ durable: true, consumers: 1 }));
-      expect(byName['notifications.events']).toEqual(expect.objectContaining({ durable: true, consumers: 1 }));
+      expect(byName['email.order-created']).toEqual(expect.objectContaining({ durable: true, consumers: 3 }));
+      expect(byName['notifications.events']).toEqual(expect.objectContaining({ durable: true, consumers: 3 }));
       expect(byName['email.retry']).toBeDefined();
       expect(byName['email.dead']).toBeDefined();
       expect(byName['notifications.dead']).toBeDefined();

@@ -17,25 +17,26 @@ PostgreSQL: users_db · products_db · orders_db · notifications_db       MinIO
 
 ---
 
-## الحاويات الـ 14 (ليش هالقد)
+## حاويات Docker Compose
 
-كل خدمة برنامج مستقل، فبتاخد container لحالها: **6 بنية تحتية (Postgres، نسخة القراءة، Redis، RabbitMQ، MinIO، Mailpit) + 6 باك (NestJS، منهم email-worker) + 1 مخزون (Go) + 1 ويب = 14**. تطبيق Flutter مش container لأنو بيشتغل على الموبايل.
+في تشغيل المتطلب الخامس **21 حاوية**. الـGateway والإشعارات وعامل البريد كل واحد منهم إله ثلاث نسخ، وHAProxy هو المدخل العام للـAPI وSocket.IO. تطبيق Flutter يشتغل على الموبايل. [دليل المتطلب الخامس](REQUIREMENT-5-SCALABILITY.md)
 
 | الحاوية | البورت على جهازك | شغلتها |
 |---|---|---|
 | `postgres` | `5433` | 4 قواعد منفصلة بنفس الـ container (لتوفير الرام). 5433 لحتى ما يتعارض مع Postgres منزّل عندكم |
 | `postgres-replica` | `5440` | **نسخة قراءة** من Postgres (streaming replication). القراءة منها، والكتابة على الأساسية |
-| `redis` | `6379` | **كاش** للكتالوج والإحصائيات، وعلامات read-your-writes. بدون حفظ على القرص |
+| `redis` | `6379` | كاش وعلامات read-your-writes، وعدادات مشتركة وبث لحظي وتنسيق إرسال البريد. AOF يحفظ المفاتيح ضمن volume |
 | `rabbitmq` | `5672`، واجهة `15672` | الأحداث: exchange `events` وطابور لكل مستهلك، مع retry و DLQ |
 | `mailpit` | SMTP `1025`، صندوق `8025` | سيرفر بريد تجريبي (المتطلب 4). بيتبدّل بـ Mailtrap/Gmail من `.env` |
-| `email-worker` | مخفي | **المتطلب 4**: بياخد `order.created` ويبعت إيميل التأكيد. ack بعد الإرسال، إعادة محاولة، DLQ |
+| `email-worker` ×3 | مخفي | العمال يتقاسموا طابور `order.created` ويرسلوا التأكيد. ack بعد الإرسال، إعادة محاولة، DLQ |
 | `minio` | `9000`، واجهة `9001` | تخزين الصور (متوافق مع S3) |
-| `api-gateway` | `3000` | الوحيد من الباك المفتوح للعالم، ومعه Swagger على `/docs` |
+| `load-balancer` | `3000` | HAProxy لطلبات REST وSwagger واتصالات Socket.IO |
+| `api-gateway` ×3 | مخفي | التحقق من الصلاحيات وتمرير REST إلى الخدمات وتقديم Swagger |
 | `users-service` | مخفي | التسجيل، الدخول، التوكنات، قفل الحساب |
 | `products-service` | مخفي | المنتجات، التصنيفات، الصور، الأسعار |
 | `inventory-service` | `50051` | **Go + gRPC**: المخزون (معرفة الكمية، الحجز، الإرجاع)، وقاعدته `inventory_db`. البورت مفتوح بس للتجربة بـ grpcurl |
 | `orders-service` | مخفي | الطلبات، الحالات، الملكية، الإحصائيات |
-| `notifications-service` | `3004` | الإشعارات + **قنوات Socket.io** (`admin.orders` للأدمن، `order:<id>` لصاحب الطلب). البورت مفتوح لأنو الـ WebSocket لازم العميل يوصله مباشرة |
+| `notifications-service` ×3 | مخفي | قنوات Socket.IO (`admin.orders` للأدمن و`order:<id>` لصاحب الطلب) خلف HAProxy |
 | `web` | `3001` | لوحة التحكم |
 
 أشياء بالـ compose لازم تعرفوها:

@@ -7,6 +7,7 @@ import { AuthController } from './auth/auth.controller';
 import { ClientsConfigModule } from './common/clients.module';
 import { JwtAuthGuard, RolesGuard } from './common/guards';
 import { HttpExceptionFilter } from './common/http-exception.filter';
+import { RedisThrottlerStorage } from './common/redis-throttler.storage';
 import { HealthController, RATE_LIMIT, SystemController } from './health/health.controller';
 import { HealthService } from './health/health.service';
 import { NotificationsController } from './notifications/notifications.controller';
@@ -19,7 +20,9 @@ import { UsersController } from './users/users.controller';
     ClientsConfigModule,
     JwtModule.register({}),
     // Global rate limit per IP; auth routes override it with a stricter one.
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: RATE_LIMIT }]),
+    process.env.REDIS_URL
+      ? ThrottlerModule.forRootAsync({ useClass: RedisThrottlerStorage })
+      : ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: RATE_LIMIT }]),
   ],
   controllers: [
     AuthController,

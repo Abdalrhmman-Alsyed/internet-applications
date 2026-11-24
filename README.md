@@ -14,6 +14,7 @@
 - 🔌 **المتطلب الثاني (خدمة المخزون بـ Go و gRPC) مع الإثبات:** [docs/REQUIREMENT-2-GRPC.md](docs/REQUIREMENT-2-GRPC.md)
 - ⚡ **المتطلب الثالث (الأداء: فهارس، Redis، ETag، نسخة قراءة) مع أرقام قبل وبعد:** [docs/REQUIREMENT-3-PERFORMANCE.md](docs/REQUIREMENT-3-PERFORMANCE.md)
 - 📨 **المتطلب الرابع (RabbitMQ: عامل إيميل مع ack وإعادة محاولة و DLQ، وقنوات لحظية بصلاحيات):** [docs/REQUIREMENT-4-ASYNC-REALTIME.md](docs/REQUIREMENT-4-ASYNC-REALTIME.md)
+- **المتطلب الخامس** [دليل التوسّع وتوزيع الأحمال والتجربة للمناقشة](docs/REQUIREMENT-5-SCALABILITY.md)
 - 🎤 **سيناريو العرض قدام المعيد خطوة بخطوة:** [docs/DEMO.md](docs/DEMO.md)
 - 📐 المعمارية وأسباب كل قرار: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - ✅ المتطلبات، وين تحققت، وكيف منثبتها: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)

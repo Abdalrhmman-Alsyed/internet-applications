@@ -1,0 +1,33 @@
+# Local classroom run alongside the earlier stack, with its own Compose project name.
+services:
+  postgres:
+    ports: !reset []
+  postgres-replica:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  rabbitmq:
+    ports: !override ["127.0.0.1:25672:5672", "127.0.0.1:25673:15672"]
+  minio:
+    ports: !override ["127.0.0.1:19000:9000", "127.0.0.1:19001:9001"]
+  mailpit:
+    ports: !override ["127.0.0.1:18025:8025"]
+  inventory-service:
+    ports: !reset []
+  products-service:
+    environment:
+      MINIO_PUBLIC_URL: http://localhost:19000
+  load-balancer:
+    ports: !override ["127.0.0.1:13000:3000"]
+  api-gateway:
+    environment:
+      CORS_ORIGINS: http://localhost:13001
+  notifications-service:
+    environment:
+      CORS_ORIGINS: http://localhost:13001
+  web:
+    ports: !override ["127.0.0.1:13001:3001"]
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:13000
+        NEXT_PUBLIC_WS_URL: http://localhost:13000

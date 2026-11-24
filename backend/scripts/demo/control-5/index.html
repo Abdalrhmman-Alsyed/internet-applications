@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>مختبر التوسّع | المتطلب الخامس</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script src="/dashboard.js" type="module"></script>
+</head>
+<body>
+  <aside class="sidebar" aria-label="تنقّل لوحة العرض">
+    <a href="#overview" class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>مختبر التوسّع</strong><small>مشروع تطبيقات الإنترنت</small></span></a>
+    <nav class="site-nav">
+      <a class="selected" href="#overview"><span aria-hidden="true">▦</span> نظرة عامة</a>
+      <a href="#traffic"><span aria-hidden="true">▥</span> توزيع الطلبات</a>
+      <a href="#experiments"><span aria-hidden="true">◇</span> التجارب الحيّة</a>
+      <a href="#guide"><span aria-hidden="true">≡</span> دليل المناقشة</a>
+    </nav>
+    <div class="sidebar-end">
+      <div class="source-links">
+        <a href="http://localhost:13000/docs" target="_blank" rel="noreferrer">Swagger</a>
+        <a href="http://localhost:25673" target="_blank" rel="noreferrer">RabbitMQ</a>
+        <a href="http://localhost:18025" target="_blank" rel="noreferrer">Mailpit</a>
+      </div>
+      <div class="environment"><span class="dot" id="sidebar-dot"></span><span><strong>بيئة العرض المحلية</strong><small id="sidebar-state">عم نفحص الاتصال</small></span></div>
+    </div>
+  </aside>
+  <main class="workspace" id="overview">
+    <header class="topbar">
+      <p>مشروع تطبيقات الإنترنت <span>/</span> المتطلب الخامس</p>
+      <output class="connection" id="connection"><span class="dot"></span><span>عم نفحص الاتصال</span></output>
+    </header>
+    <section class="hero" aria-labelledby="main-title">
+      <div class="hero-copy">
+        <span class="kicker">العرض العملي</span>
+        <h1 id="main-title">التوسّع وتوزيع <br>الأحمال</h1>
+        <p>تابع مسار الطلبات من موزّع الحمل إلى النسخ الثلاث، وراقب شو بيصير وقت توقّف واحدة منها.</p>
+        <div class="hero-actions">
+          <button class="button primary" data-run="full"><span class="play" aria-hidden="true"></span> شغّل العرض الكامل</button>
+          <button class="button quiet" data-run="probe">جرّب 9 طلبات</button>
+          <button class="button quiet" data-run="start" hidden>شغّل البيئة المعزولة</button>
+        </div>
+      </div>
+      <div class="architecture" id="architecture" aria-label="مسار الطلب عبر موزّع الحمل والنسخ الثلاث">
+        <div class="arch-head"><span>مسار الطلبات</span><span class="arch-state" id="arch-caption">HAProxy · Round Robin</span></div>
+        <div class="balancer"><span class="balancer-mark" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>HAProxy</strong><small>موزّع الحمل</small></span></div>
+        <div class="wire-main"><i></i></div>
+        <div class="replicas" id="replicas"></div>
+      </div>
+    </section>
+    <p class="message" id="message" role="status"></p>
+
+    <section class="metrics" aria-label="القياسات">
+      <article class="metric"><header><span class="metric-icon purple" aria-hidden="true">▤</span><h2>الطلبات المنفّذة</h2></header><div class="metric-value"><strong id="metric-sent">—</strong><span> / 500</span></div><p id="metric-sent-note">اختبار توزيع الحمل</p></article>
+      <article class="metric"><header><span class="metric-icon green" aria-hidden="true">✓</span><h2>نسبة النجاح</h2></header><div class="metric-value"><strong id="metric-success">—</strong><span>%</span></div><p id="metric-failures">بتظهر أثناء الاختبار</p></article>
+      <article class="metric"><header><span class="metric-icon blue" aria-hidden="true">◴</span><h2>زمن الاستجابة p95</h2></header><div class="metric-value"><strong id="metric-latency">—</strong><span> ms</span></div><p>95٪ من الطلبات ضمن هالزمن</p></article>
+      <article class="metric"><header><span class="metric-icon teal" aria-hidden="true">◈</span><h2>نسخ الـGateway</h2></header><div class="metric-value"><strong id="metric-gateways">—</strong><span> / 3</span></div><p id="metric-worker-note">عم نفحص الحاويات</p></article>
+    </section>
+
+    <section class="section scales" id="traffic" aria-label="اختبار توزيع الطلبات">
+      <article class="panel distribution">
+        <div class="panel-top"><div><h2>توزيع الطلبات على النسخ</h2><p>الطلبات الناجحة قبل الإيقاف وأثناءه وبعده</p></div><button class="button secondary" data-run="load">شغّل اختبار 500 طلب</button></div>
+        <div class="progress-caption"><span id="progress-phase">بانتظار تشغيل الاختبار</span><strong id="progress-value" dir="ltr">0 / 500</strong></div>
+        <div id="progress" class="progress" role="progressbar" aria-label="تقدّم اختبار 500 طلب" aria-valuemin="0" aria-valuemax="500" aria-valuenow="0"><span></span></div>
+        <div class="chart" id="chart"></div>
+        <div class="legend"><span class="before">قبل الإيقاف</span><span class="stopping">أثناء الإيقاف</span><span class="after">بعد الإيقاف</span></div>
+      </article>
+      <article class="panel timeline">
+        <div class="panel-top"><div><h2>سجلّ التجربة</h2><p id="run-label">مراحل آخر تجربة</p></div><span class="run-status" id="run-status">جاهز</span></div>
+        <ol id="timeline"><li class="empty-log">بتظهر الخطوات هون أول ما تشغّل تجربة.</li></ol>
+      </article>
+    </section>
+
+    <section class="section" id="experiments" aria-labelledby="experiments-title">
+      <header class="section-title"><h2 id="experiments-title">التجارب الحيّة</h2><p>شغّل كل تجربة لحالها واعرض نتيجتها.</p></header>
+      <div class="experiment-grid">
+        <article class="panel experiment"><span class="metric-icon purple" aria-hidden="true">↺</span><h3>الحدّ المشترك</h3><p>طلب تسجيل الدخول يمرّ على النسخ الثلاث، وRedis بيحسب المحاولات بعدّاد واحد.</p><output id="proof-rate">لم تُشغّل بعد</output><button class="button secondary" data-run="rate">جرّب حدّ تسجيل الدخول</button></article>
+        <article class="panel experiment"><span class="metric-icon green" aria-hidden="true">✉</span><h3>عمّال البريد</h3><p>أوقف عامل، اعمل طلب حقيقي، وجرّب إعادة تسليم نفس الرسالة 9 مرات.</p><output id="proof-mail">لم تُشغّل بعد</output><button class="button secondary" data-run="workers">جرّب البريد والبث</button></article>
+        <article class="panel experiment"><span class="metric-icon blue" aria-hidden="true">⌁</span><h3>اتصال WebSocket</h3><p>أوقف نسخة الإشعارات اللي عليها الاتصال وتابع إعادة الاشتراك بقناة الأدمن.</p><output id="proof-socket">لم تُشغّل بعد</output><button class="button secondary" data-run="socket">جرّب إعادة الاتصال</button></article>
+        <article class="panel experiment"><span class="metric-icon teal" aria-hidden="true">☑</span><h3>اختبارات النظام السابقة</h3><p>تحقّق من الصلاحيات والمخزون والطلبات والإشعارات والبريد عبر مجموعة الاختبارات.</p><output id="proof-regression">لم تُشغّل بعد</output><button class="button secondary" data-run="regression">شغّل اختبارات النظام</button></article>
+      </div>
+    </section>
+
+    <section class="section guide" id="guide" aria-labelledby="guide-title">
+      <header class="section-title"><h2 id="guide-title">دليل المناقشة</h2><p>شو تحكي وإنت عم تعرض النتيجة.</p></header>
+      <details class="panel" open><summary>كيف أثبت إن التوزيع شغّال وإن النظام كمّل؟</summary><p>ابدأ بـ9 طلبات وشوف عدد الردود من كل نسخة. بعدها شغّل اختبار الـ500، وبيّن بالجدول إن النسخة اللي وقفت صار عندها صفر ردود بعد إيقافها، والنسختين التانيات كملوا. الحاوية بترجع تشتغل بنهاية التجربة.</p></details>
+      <details class="panel"><summary>ليش نقلنا عدّاد تسجيل الدخول إلى Redis؟</summary><p>قبل الإصلاح كان لكل Gateway عدّاد بذاكرته، وظهر <bdi>HTTP 429</bdi> عند الطلب 61 في التجربة الموثّقة. بعد مشاركة العدّاد، الحدّ الافتراضي 20 طلب بالدقيقة عبر النسخ الثلاث مع بعض.</p></details>
+      <details class="panel"><summary>كيف منعنا تكرار البريد، وكيف وصل البث بين النسخ؟</summary><p>عمّال البريد يتقاسموا طابور واحد. حجز Redis بيمنع عاملين من إرسال تأكيد لنفس الطلب بنفس الوقت، وMailpit يتعرّف على معرّف الرسالة الثابت. إشعارات Socket.IO بتنتقل عبر Redis Pub/Sub من نسخة المعالجة للنسخة اللي عليها اتصال المستخدم.</p></details>
+    </section>
+  </main>
+</body>
+</html>

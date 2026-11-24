@@ -141,14 +141,11 @@ backend/
 
 **حالات الطلب:** `PENDING → CONFIRMED → SHIPPED → DELIVERED`، والإلغاء مسموح من `PENDING` أو `CONFIRMED` (والمخزون بيرجع).
 
-**WebSocket:** `io('http://localhost:3004', { auth: { token } })` ← event اسمه `notification`.
+**WebSocket عبر موزّع الحمل** `io('http://localhost:3000', { transports: ['websocket'], auth: { token } })`. حدث الإشعار اسمه `notification`.
 
-## ملاحظات للمتطلبات الجاية (الأداء والتوسع)
+## التوسّع وتوزيع الأحمال
 
-- الـ rate limiter حالياً بالذاكرة؛ مع أكتر من نسخة من الـ Gateway لازم ننقله لـ Redis.
-- Socket.io مع أكتر من نسخة من notifications-service بيحتاج Redis adapter.
-- الخدمات stateless (الصور بـ MinIO، الجلسات بالـ JWT)، فينفع نعمل `docker compose up --scale products-service=3` بعد ما نحط load balancer.
-- MinIO ما عاد ينشر صور Docker عامة، فمستعملين صورة Bitnami لنفس الإصدار.
+في تشغيل Docker Compose يدخل REST وSocket.IO عبر HAProxy. ثلاث نسخ من الـGateway تشارك عدّاد تحديد الطلبات في Redis، وثلاث نسخ إشعارات تتبادل البث عبر Redis Pub/Sub. ثلاثة عمّال بريد يقرؤون من نفس طابور RabbitMQ. [رسم التوزيع وتفاصيل الاختبار](REQUIREMENT-5-SCALABILITY.md)
 
 ## الواجهات
 

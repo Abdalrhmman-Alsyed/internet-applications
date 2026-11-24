@@ -6,11 +6,13 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { hostname } from 'node:os';
 
 export const ADMINS_ROOM = 'admins';
 export const userRoom = (userId: string) => `user:${userId}`;
@@ -24,7 +26,7 @@ type SubscribeRequest = { channel: 'admin.orders' } | { channel: 'order'; orderI
 type SubscribeAnswer = { ok: true; channel: string } | { ok: false; status: number; message: string };
 
 /**
- * Real-time channel (Socket.io, port 3004).
+ * Real-time channel (Socket.IO through the public load balancer).
  *
  * 1. Identity on connect: the access token is verified; a bad token is disconnected.
  *    Every user is placed in their own room (personal notifications), admins also in "admins".
@@ -37,7 +39,7 @@ type SubscribeAnswer = { ok: true; channel: string } | { ok: false; status: numb
 @WebSocketGateway({
   cors: { origin: (process.env.CORS_ORIGINS ?? 'http://localhost:3001').split(','), credentials: true },
 })
-export class NotificationsGateway implements OnGatewayConnection {
+export class NotificationsGateway implements OnGatewayConnection, OnGatewayInit {
   private readonly logger = new Logger(NotificationsGateway.name);
   @WebSocketServer() server!: Server;
 
@@ -45,6 +47,13 @@ export class NotificationsGateway implements OnGatewayConnection {
     private readonly jwt: JwtService,
     @Inject(ORDERS_SERVICE) private readonly orders: ClientProxy,
   ) {}
+
+  afterInit(server: Server) {
+    const instance = hostname();
+    server.engine.on('initial_headers', (headers) => {
+      headers['X-Served-By'] = instance;
+    });
+  }
 
   async handleConnection(client: Socket) {
     try {

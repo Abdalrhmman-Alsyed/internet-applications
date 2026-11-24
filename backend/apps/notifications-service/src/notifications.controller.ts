@@ -7,7 +7,7 @@ import {
   ProductLowStockEvent,
   UserRegisteredEvent,
 } from '@app/common';
-import { Controller, Logger } from '@nestjs/common';
+import { Controller, Get, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, MessagePattern, Payload, RmqContext } from '@nestjs/microservices';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsService } from './notifications.service';
@@ -27,6 +27,11 @@ export class NotificationsController {
     private readonly notifications: NotificationsService,
     private readonly gateway: NotificationsGateway,
   ) {}
+
+  @Get('health/live')
+  liveness() {
+    return { status: 'ok' };
+  }
 
   // ─── Requests from the gateway (TCP) ───
   @MessagePattern(PATTERNS.health)

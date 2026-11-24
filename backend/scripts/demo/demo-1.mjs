@@ -2,7 +2,7 @@
 import { io } from 'socket.io-client';
 import { ACCOUNTS, answer, api, bold, compose, confirm, dim, login, ok, run, say, show, sleep, step, table, title, preflight } from './lib.mjs';
 
-const WS = process.env.WS_URL ?? 'http://localhost:3004';
+const WS = process.env.WS_URL ?? new URL(process.env.API_URL ?? 'http://localhost:3000').origin;
 let demoOrder;
 let admin;
 let socket;
